@@ -36,4 +36,7 @@ export interface DatasetGrafico {
   backgroundColor: string
   tension: number
   spanGaps?: boolean
+  pointBackgroundColor?: (string | undefined)[]
+  pointBorderColor?: (string | undefined)[]
+  situaciones?: (number | null)[]
 }

@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Archivos de ejemplo y testing
+src/utils/ejemplo.json

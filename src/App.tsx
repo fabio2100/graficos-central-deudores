@@ -70,6 +70,18 @@ function App() {
     return colores.slice(0, cantidad)
   }
 
+  // Función para obtener color basado en la situación (1=verde, 5=rojo)
+  const obtenerColorPorSituacion = (situacion: number): string => {
+    // Normalizar situación de 1-5 a 0-1
+    const normalizado = (situacion - 1) / 4
+    
+    // Interpolar entre verde y rojo
+    const rojo = Math.round(normalizado * 255)
+    const verde = Math.round((1 - normalizado) * 255)
+    
+    return `rgb(${rojo}, ${verde}, 0)`
+  }
+
   // Función para procesar los datos de la API y crear el gráfico
   const procesarDatosParaGrafico = (resultados: ResponseBCRA['results']): DatosGrafico => {
     // Obtener todos los períodos únicos y ordenarlos
@@ -82,7 +94,7 @@ function App() {
       resultados.periodos
         .flatMap(periodo => 
           periodo.entidades
-            .filter(entidad => entidad.situacion === 1)
+            .filter(entidad => entidad.situacion > 0)
             .map(entidad => entidad.entidad)
         )
     )]
@@ -92,21 +104,34 @@ function App() {
     
     // Crear datasets para cada entidad
     const datasets = entidadesUnicas.map((nombreEntidad, index) => {
-      // Crear array de datos para cada período
-      const datosEntidad = periodosUnicos.map(periodo => {
+      // Crear array de datos, colores y situaciones para cada período
+      const datosEntidad: (number | null)[] = []
+      const coloresPuntos: (string | undefined)[] = []
+      const situacionesEntidad: (number | null)[] = []
+      
+      periodosUnicos.forEach(periodo => {
         // Buscar el período correspondiente
         const periodoData = resultados.periodos.find(p => p.periodo === periodo)
-        if (!periodoData) return null
+        if (!periodoData) {
+          datosEntidad.push(null)
+          coloresPuntos.push(undefined)
+          situacionesEntidad.push(null)
+          return
+        }
         
         // Buscar la entidad en ese período
         const entidadData = periodoData.entidades.find(e => e.entidad === nombreEntidad)
         
         // Si no existe la entidad o tiene situacion 0, devolver null (no se mostrará el punto)
         if (!entidadData || entidadData.situacion === 0) {
-          return null
+          datosEntidad.push(null)
+          coloresPuntos.push(undefined)
+          situacionesEntidad.push(null)
+        } else {
+          datosEntidad.push(entidadData.monto)
+          coloresPuntos.push(obtenerColorPorSituacion(entidadData.situacion))
+          situacionesEntidad.push(entidadData.situacion)
         }
-        
-        return entidadData.monto
       })
       
       return {
@@ -115,7 +140,10 @@ function App() {
         borderColor: colores[index],
         backgroundColor: colores[index] + '20', // Transparencia del 20%
         tension: 0.4,
-        spanGaps: false // No conectar líneas cuando hay valores null
+        spanGaps: false, // No conectar líneas cuando hay valores null
+        pointBackgroundColor: coloresPuntos,
+        pointBorderColor: coloresPuntos,
+        situaciones: situacionesEntidad
       }
     })
     
@@ -125,15 +153,15 @@ function App() {
       const periodoData = resultados.periodos.find(p => p.periodo === periodo)
       if (!periodoData) return null
       
-      // Contar entidades con situacion 1 en este período
-      const entidadesActivas = periodoData.entidades.filter(entidad => entidad.situacion === 1)
+      // Contar entidades con situacion mayor a 0 en este período
+      const entidadesActivas = periodoData.entidades.filter(entidad => entidad.situacion > 0)
       
       // Si hay solo una entidad activa o ninguna, no mostrar el total
       if (entidadesActivas.length <= 1) {
         return null
       }
       
-      // Sumar solo los montos de las entidades con situacion 1
+      // Sumar solo los montos de las entidades con situacion mayor a 0
       const total = entidadesActivas.reduce((suma, entidad) => suma + entidad.monto, 0)
       
       return total > 0 ? total : null
@@ -143,13 +171,22 @@ function App() {
     const tieneValoresTotal = datosTotal.some(valor => valor !== null)
     
     if (tieneValoresTotal) {
+      // Crear array de colores y situaciones para la línea total (color uniforme)
+      const coloresTotal = datosTotal.map(valor => 
+        valor !== null ? '#FF6B6B' : undefined
+      )
+      const situacionesTotal = datosTotal.map(() => null) // La línea total no tiene situación específica
+      
       datasets.push({
         label: 'Total',
         data: datosTotal,
         borderColor: '#FF6B6B', // Color rojo distintivo para el total
         backgroundColor: '#FF6B6B20', // Transparencia del 20%
         tension: 0.4,
-        spanGaps: false // No conectar líneas cuando hay valores null
+        spanGaps: false, // No conectar líneas cuando hay valores null
+        pointBackgroundColor: coloresTotal,
+        pointBorderColor: coloresTotal,
+        situaciones: situacionesTotal
       })
     }
     
@@ -210,7 +247,8 @@ function App() {
       } else {
         setMensaje('Error de conexión. Verifique su internet.')
       }
-      setMostrarResultados(true)    } finally {
+      setMostrarResultados(true)
+    } finally {
       setIsLoading(false)
     }
   }

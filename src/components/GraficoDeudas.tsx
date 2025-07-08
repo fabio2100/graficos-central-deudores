@@ -29,6 +29,7 @@ interface Props {
 const GraficoDeudas = ({ datosGrafico }: Props) => {
   const opciones = {
     responsive: true,
+    maintainAspectRatio: false,
     plugins: {
       legend: {
         position: 'top' as const,
@@ -48,7 +49,13 @@ const GraficoDeudas = ({ datosGrafico }: Props) => {
           label: function(context: any) {
             const label = context.dataset.label || ''
             const valor = context.parsed.y
-            return `${label}: $${valor.toLocaleString('es-AR')}`
+            const situacion = context.dataset.situaciones ? context.dataset.situaciones[context.dataIndex] : null
+            
+            let tooltipText = `${label}: $${valor.toLocaleString('es-AR')}`
+            if (situacion !== null && situacion !== undefined) {
+              tooltipText += ` (Situación: ${situacion})`
+            }
+            return tooltipText
           }
         }
       },
@@ -88,7 +95,9 @@ const GraficoDeudas = ({ datosGrafico }: Props) => {
 
   return (
     <div className="grafico-container">
-      <Line data={datosGrafico} options={opciones} />
+      <div className="grafico-wrapper">
+        <Line data={datosGrafico} options={opciones} />
+      </div>
     </div>
   )
 }
