@@ -244,31 +244,44 @@ const GraficoDeudas = () => {
       return `${mes}/${año}`;
     });
 
-    // Crear series para cada entidad
-    const series = entidadesUnicas.map((nombreEntidad, index) => {
-      const datos: (number | null)[] = [];
-      const coloresPuntos: string[] = [];
+    const series: Array<{
+      data: (number | null)[];
+      label: string;
+      color: string;
+      connectNulls?: boolean;
+    }> = [];
 
-      periodosOrdenados.forEach((periodo: Periodo) => {
+    // Crear series para cada entidad con puntos por situación
+    entidadesUnicas.forEach((nombreEntidad) => {
+      // Agrupar datos por situación para cada entidad
+      const datosPorSituacion: { [key: number]: (number | null)[] } = {};
+      
+      // Inicializar arrays para cada situación posible
+      for (let sit = 1; sit <= 6; sit++) {
+        datosPorSituacion[sit] = new Array(periodosOrdenados.length).fill(null);
+      }
+
+      periodosOrdenados.forEach((periodo: Periodo, periodoIndex) => {
         const entidad = periodo.entidades.find((e: Entidad) => e.entidad === nombreEntidad);
-        if (entidad && entidad.situacion !== 0) {
-          // Solo agregar el punto si la situación no es 0
-          datos.push(entidad.monto);
-          coloresPuntos.push(obtenerColorPuntoSituacion(entidad.situacion));
-        } else {
-          // Si no hay entidad o situación es 0, usar null para no dibujar el punto
-          datos.push(null);
-          coloresPuntos.push('transparent');
+        if (entidad && entidad.situacion !== 0 && entidad.monto > 0) {
+          datosPorSituacion[entidad.situacion][periodoIndex] = entidad.monto;
         }
       });
 
-      const coloresLinea = ['#1976d2', '#dc004e', '#ed6c02', '#2e7d32', '#9c27b0', '#d32f2f'];
-      
-      return {
-        data: datos,
-        label: nombreEntidad,
-        color: coloresLinea[index % coloresLinea.length],
-      };
+      // Crear una serie por cada situación que tenga datos
+      Object.entries(datosPorSituacion).forEach(([situacion, datos]) => {
+        const situacionNum = parseInt(situacion);
+        const hayDatos = datos.some(dato => dato !== null);
+        
+        if (hayDatos) {
+          series.push({
+            data: datos,
+            label: `${nombreEntidad} (Sit. ${situacionNum})`,
+            color: obtenerColorPuntoSituacion(situacionNum),
+            connectNulls: false,
+          });
+        }
+      });
     });
 
     // Calcular la suma total por período y verificar si mostrar puntos
@@ -464,9 +477,11 @@ const GraficoDeudas = () => {
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Visualización cronológica de la evolución de deudas por entidad financiera. 
             <br />
-            • <strong>Puntos coloreados</strong>: Verde (situación normal) → Amarillo → Naranja → Rojo (situación crítica)
+            • <strong>Series por situación</strong>: Cada entidad se desglosa por situación crediticia con colores específicos
             <br />
-            • <strong>Sin puntos</strong>: Cuando la situación es 0 (sin deuda)
+            • <strong>Verde</strong>: Situación 1 (Normal) → <strong>Amarillo</strong>: Situación 3 → <strong>Rojo</strong>: Situación 5-6 (Crítica)
+            <br />
+            • <strong>Sin puntos</strong>: Cuando la situación es 0 (sin deuda) o monto es 0
             <br />
             • <strong>Línea naranja "Total General"</strong>: Solo visible cuando hay múltiples entidades con deuda
           </Typography>
