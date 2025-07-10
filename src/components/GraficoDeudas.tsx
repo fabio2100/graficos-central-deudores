@@ -219,14 +219,20 @@ const GraficoDeudas = () => {
       )
     );
 
-    const xAxisData = datosConsulta.periodos.map((periodo: Periodo) => {
+    // Ordenar períodos cronológicamente (más antiguo primero, más reciente último)
+    const periodosOrdenados = [...datosConsulta.periodos].sort((a, b) => 
+      parseInt(a.periodo) - parseInt(b.periodo)
+    );
+
+    const xAxisData = periodosOrdenados.map((periodo: Periodo) => {
       const año = periodo.periodo.substring(0, 4);
       const mes = periodo.periodo.substring(4, 6);
       return `${mes}/${año}`;
     });
 
+    // Crear series para cada entidad
     const series = entidadesUnicas.map((nombreEntidad, index) => {
-      const datos = datosConsulta.periodos.map((periodo: Periodo) => {
+      const datos = periodosOrdenados.map((periodo: Periodo) => {
         const entidad = periodo.entidades.find((e: Entidad) => e.entidad === nombreEntidad);
         return entidad ? entidad.monto : 0;
       });
@@ -238,6 +244,18 @@ const GraficoDeudas = () => {
         label: nombreEntidad,
         color: colores[index % colores.length],
       };
+    });
+
+    // Calcular la suma total por período
+    const datosTotal = periodosOrdenados.map((periodo: Periodo) => {
+      return periodo.entidades.reduce((suma: number, entidad: Entidad) => suma + entidad.monto, 0);
+    });
+
+    // Agregar la serie de total
+    series.push({
+      data: datosTotal,
+      label: 'Total General',
+      color: '#ff9800', // Color naranja para destacar
     });
 
     return { xAxisData, series };
@@ -406,6 +424,11 @@ const GraficoDeudas = () => {
           <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <TrendingUpIcon />
             Evolución de Deudas por Entidad y Período
+          </Typography>
+          
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Visualización cronológica de la evolución de deudas por entidad financiera. 
+            La línea naranja "Total General" muestra la suma de todas las deudas por período.
           </Typography>
           
           <Box sx={{ height: 400, mt: 2 }}>
