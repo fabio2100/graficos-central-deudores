@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import axios from 'axios';
 import {
   Box,
   Paper,
@@ -63,16 +64,82 @@ const obtenerIconoSituacion = (situacion: number) => {
   return <ErrorIcon />;
 };
 
+// Función para formatear el número mientras se escribe
+const formatearNumero = (valor: string): string => {
+  // Remover todo lo que no sea dígito
+  const numeros = valor.replace(/\D/g, '');
+  
+  // Limitar a 11 dígitos
+  const numeroLimitado = numeros.slice(0, 11);
+  
+  // Formatear como XX-XXXXXXXX-X si tiene suficientes dígitos
+  if (numeroLimitado.length >= 3 && numeroLimitado.length <= 11) {
+    if (numeroLimitado.length <= 2) {
+      return numeroLimitado;
+    } else if (numeroLimitado.length <= 10) {
+      return `${numeroLimitado.slice(0, 2)}-${numeroLimitado.slice(2)}`;
+    } else {
+      return `${numeroLimitado.slice(0, 2)}-${numeroLimitado.slice(2, 10)}-${numeroLimitado.slice(10)}`;
+    }
+  }
+  
+  return numeroLimitado;
+};
+
+// Función para validar dígito verificador de CUIT/CUIL
+const validarCuitCuil = (numero: string): boolean => {
+  const numeroLimpio = numero.replace(/\D/g, '');
+  
+  if (numeroLimpio.length !== 11) return false;
+  
+  const multiplicadores = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
+  let suma = 0;
+  
+  for (let i = 0; i < 10; i++) {
+    suma += parseInt(numeroLimpio[i]) * multiplicadores[i];
+  }
+  
+  const resto = suma % 11;
+  let digitoVerificador = 11 - resto;
+  
+  if (digitoVerificador === 11) digitoVerificador = 0;
+  if (digitoVerificador === 10) digitoVerificador = 9;
+  
+  return digitoVerificador === parseInt(numeroLimpio[10]);
+};
+
 const GraficoDeudas = () => {
   const [numeroIdentificacion, setNumeroIdentificacion] = useState<string>('');
   const [cargando, setCargando] = useState<boolean>(false);
   const [datosConsulta, setDatosConsulta] = useState<ResultadoBCRA | null>(null);
   const [error, setError] = useState<string>('');
 
-  // Función para simular la búsqueda (usando datos de ejemplo)
+  // Manejar cambio en el input con formateo automático
+  const manejarCambioNumero = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const valorFormateado = formatearNumero(event.target.value);
+    setNumeroIdentificacion(valorFormateado);
+    
+    // Limpiar error si existe
+    if (error) setError('');
+  };
+
+  // Función para buscar deudor en la API del BCRA
   const buscarDeudor = async () => {
     if (!numeroIdentificacion.trim()) {
       setError('Por favor ingrese un número de identificación');
+      return;
+    }
+
+    // Validar formato básico del CUIT/CUIL (11 dígitos)
+    const numeroLimpio = numeroIdentificacion.replace(/\D/g, '');
+    if (numeroLimpio.length !== 11) {
+      setError('El número de CUIT/CUIL debe tener 11 dígitos');
+      return;
+    }
+
+    // Validar dígito verificador
+    if (!validarCuitCuil(numeroIdentificacion)) {
+      setError('El número de CUIT/CUIL no es válido (dígito verificador incorrecto)');
       return;
     }
 
@@ -80,14 +147,61 @@ const GraficoDeudas = () => {
     setError('');
     
     try {
-      // Simular delay de API
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // URL correcta de la API del BCRA para Central de Deudores (Deudas Históricas)
+      const url = `https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/${numeroLimpio}`;
       
-      // Usar datos de ejemplo por ahora
-      setDatosConsulta(datosEjemplo.results);
+      console.log('Consultando API del BCRA:', url);
       
-    } catch {
-      setError('Error al consultar la información. Intente nuevamente.');
+      const response = await axios.get(url, {
+        timeout: 30000, // 30 segundos de timeout
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Central-Deudores-App/1.0'
+        }
+      });
+
+      if (response.data && response.data.results) {
+        setDatosConsulta(response.data.results);
+        console.log('Datos recibidos:', response.data.results);
+      } else {
+        throw new Error('Formato de respuesta inesperado');
+      }
+      
+    } catch (error: unknown) {
+      console.error('Error al consultar la API:', error);
+      
+      let mensajeError = 'Error al consultar la información. ';
+      
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 404) {
+          mensajeError += 'No se encontraron datos para este número de identificación.';
+        } else if (error.response?.status === 400) {
+          mensajeError += 'El número de identificación no es válido.';
+        } else if (error.response?.status === 429) {
+          mensajeError += 'Demasiadas consultas. Intente nuevamente en unos minutos.';
+        } else if (error.response?.status && error.response.status >= 500) {
+          mensajeError += 'El servicio no está disponible temporalmente.';
+        } else if (error.code === 'ECONNABORTED') {
+          mensajeError += 'La consulta tardó demasiado tiempo. Intente nuevamente.';
+        } else if (error.code === 'ERR_NETWORK') {
+          mensajeError += 'No hay conexión a internet o el servicio no está disponible.';
+        } else {
+          mensajeError += 'Intente nuevamente más tarde.';
+        }
+      } else {
+        mensajeError += 'Intente nuevamente más tarde.';
+      }
+      
+      setError(mensajeError);
+      
+      // En caso de error, mostrar datos de ejemplo para testing
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Usando datos de ejemplo en modo desarrollo');
+        setTimeout(() => {
+          setDatosConsulta(datosEjemplo.results);
+          setError('⚠️ Mostrando datos de ejemplo (API no disponible)');
+        }, 1000);
+      }
     } finally {
       setCargando(false);
     }
@@ -156,6 +270,14 @@ const GraficoDeudas = () => {
           Consulta de Central de Deudores
         </Typography>
         
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Ingrese un número de CUIT/CUIL válido para consultar el historial de deudas en el BCRA.
+          <br />
+          <strong>Nota:</strong> Esta consulta accede a las deudas históricas registradas en la Central de Deudores del BCRA.
+          <br />
+          <strong>Ejemplo para testing:</strong> 20-12345678-9 (número ficticio)
+        </Typography>
+        
         <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', md: 'row' }, alignItems: 'center' }}>
           <Box sx={{ flex: 1 }}>
             <TextField
@@ -163,9 +285,10 @@ const GraficoDeudas = () => {
               label="Número de CUIT/CUIL"
               variant="outlined"
               value={numeroIdentificacion}
-              onChange={(e) => setNumeroIdentificacion(e.target.value)}
+              onChange={manejarCambioNumero}
               onKeyPress={(e) => e.key === 'Enter' && buscarDeudor()}
-              placeholder="Ej: 20123456789"
+              placeholder="Ej: 20-12345678-9"
+              helperText="Formato: XX-XXXXXXXX-X (11 dígitos)"
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
