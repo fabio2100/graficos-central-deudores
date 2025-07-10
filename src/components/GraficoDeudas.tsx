@@ -29,7 +29,21 @@ import { LineChart } from '@mui/x-charts/LineChart';
 import type { ResultadoBCRA, Entidad, Periodo } from '../types';
 import { datosEjemplo } from '../utils/datosEjemplo';
 
-// Función para obtener el color según la situación
+// Función para obtener el color según la situación (para puntos del gráfico)
+const obtenerColorPuntoSituacion = (situacion: number): string => {
+  switch (situacion) {
+    case 0: return 'transparent'; // Sin deuda - no visible
+    case 1: return '#4caf50'; // Verde - Normal
+    case 2: return '#8bc34a'; // Verde claro - Con seguimiento
+    case 3: return '#ffeb3b'; // Amarillo - En problemas
+    case 4: return '#ff9800'; // Naranja - Irrecuperable prejudicial
+    case 5: return '#f44336'; // Rojo - Irrecuperable por disposición técnica
+    case 6: return '#d32f2f'; // Rojo oscuro - Irrecuperable por disposición técnica
+    default: return '#757575'; // Gris por defecto
+  }
+};
+
+// Función para obtener el color según la situación (para tarjetas y chips)
 const obtenerColorSituacion = (situacion: number): string => {
   switch (situacion) {
     case 0: return '#4caf50'; // Verde - Sin deuda
@@ -232,23 +246,44 @@ const GraficoDeudas = () => {
 
     // Crear series para cada entidad
     const series = entidadesUnicas.map((nombreEntidad, index) => {
-      const datos = periodosOrdenados.map((periodo: Periodo) => {
+      const datos: (number | null)[] = [];
+      const coloresPuntos: string[] = [];
+
+      periodosOrdenados.forEach((periodo: Periodo) => {
         const entidad = periodo.entidades.find((e: Entidad) => e.entidad === nombreEntidad);
-        return entidad ? entidad.monto : 0;
+        if (entidad && entidad.situacion !== 0) {
+          // Solo agregar el punto si la situación no es 0
+          datos.push(entidad.monto);
+          coloresPuntos.push(obtenerColorPuntoSituacion(entidad.situacion));
+        } else {
+          // Si no hay entidad o situación es 0, usar null para no dibujar el punto
+          datos.push(null);
+          coloresPuntos.push('transparent');
+        }
       });
 
-      const colores = ['#1976d2', '#dc004e', '#ed6c02', '#2e7d32', '#9c27b0', '#d32f2f'];
+      const coloresLinea = ['#1976d2', '#dc004e', '#ed6c02', '#2e7d32', '#9c27b0', '#d32f2f'];
       
       return {
         data: datos,
         label: nombreEntidad,
-        color: colores[index % colores.length],
+        color: coloresLinea[index % coloresLinea.length],
       };
     });
 
-    // Calcular la suma total por período
-    const datosTotal = periodosOrdenados.map((periodo: Periodo) => {
-      return periodo.entidades.reduce((suma: number, entidad: Entidad) => suma + entidad.monto, 0);
+    // Calcular la suma total por período y verificar si mostrar puntos
+    const datosTotal: (number | null)[] = [];
+    
+    periodosOrdenados.forEach((periodo: Periodo) => {
+      const entidadesConDeuda = periodo.entidades.filter((entidad: Entidad) => entidad.monto > 0);
+      const totalPeriodo = periodo.entidades.reduce((suma: number, entidad: Entidad) => suma + entidad.monto, 0);
+      
+      // Solo mostrar punto de total si hay más de 1 entidad con deuda
+      if (entidadesConDeuda.length > 1) {
+        datosTotal.push(totalPeriodo);
+      } else {
+        datosTotal.push(null);
+      }
     });
 
     // Agregar la serie de total
@@ -428,7 +463,12 @@ const GraficoDeudas = () => {
           
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Visualización cronológica de la evolución de deudas por entidad financiera. 
-            La línea naranja "Total General" muestra la suma de todas las deudas por período.
+            <br />
+            • <strong>Puntos coloreados</strong>: Verde (situación normal) → Amarillo → Naranja → Rojo (situación crítica)
+            <br />
+            • <strong>Sin puntos</strong>: Cuando la situación es 0 (sin deuda)
+            <br />
+            • <strong>Línea naranja "Total General"</strong>: Solo visible cuando hay múltiples entidades con deuda
           </Typography>
           
           <Box sx={{ height: 400, mt: 2 }}>
