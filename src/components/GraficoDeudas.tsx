@@ -29,20 +29,6 @@ import { LineChart } from '@mui/x-charts/LineChart';
 import type { ResultadoBCRA, Entidad, Periodo } from '../types';
 import { datosEjemplo } from '../utils/datosEjemplo';
 
-// Función para obtener el color según la situación (para puntos del gráfico)
-const obtenerColorPuntoSituacion = (situacion: number): string => {
-  switch (situacion) {
-    case 0: return 'transparent'; // Sin deuda - no visible
-    case 1: return '#4caf50'; // Verde - Normal
-    case 2: return '#8bc34a'; // Verde claro - Con seguimiento
-    case 3: return '#ffeb3b'; // Amarillo - En problemas
-    case 4: return '#ff9800'; // Naranja - Irrecuperable prejudicial
-    case 5: return '#f44336'; // Rojo - Irrecuperable por disposición técnica
-    case 6: return '#d32f2f'; // Rojo oscuro - Irrecuperable por disposición técnica
-    default: return '#757575'; // Gris por defecto
-  }
-};
-
 // Función para obtener el color según la situación (para tarjetas y chips)
 const obtenerColorSituacion = (situacion: number): string => {
   switch (situacion) {
@@ -244,44 +230,28 @@ const GraficoDeudas = () => {
       return `${mes}/${año}`;
     });
 
-    const series: Array<{
-      data: (number | null)[];
-      label: string;
-      color: string;
-      connectNulls?: boolean;
-    }> = [];
+    // Crear series para cada entidad
+    const series = entidadesUnicas.map((nombreEntidad, index) => {
+      const datos: (number | null)[] = [];
 
-    // Crear series para cada entidad con puntos por situación
-    entidadesUnicas.forEach((nombreEntidad) => {
-      // Agrupar datos por situación para cada entidad
-      const datosPorSituacion: { [key: number]: (number | null)[] } = {};
-      
-      // Inicializar arrays para cada situación posible
-      for (let sit = 1; sit <= 6; sit++) {
-        datosPorSituacion[sit] = new Array(periodosOrdenados.length).fill(null);
-      }
-
-      periodosOrdenados.forEach((periodo: Periodo, periodoIndex) => {
+      periodosOrdenados.forEach((periodo: Periodo) => {
         const entidad = periodo.entidades.find((e: Entidad) => e.entidad === nombreEntidad);
-        if (entidad && entidad.situacion !== 0 && entidad.monto > 0) {
-          datosPorSituacion[entidad.situacion][periodoIndex] = entidad.monto;
+        if (entidad && entidad.situacion !== 0) {
+          // Solo agregar el punto si la situación no es 0
+          datos.push(entidad.monto);
+        } else {
+          // Si no hay entidad o situación es 0, usar null para no dibujar el punto
+          datos.push(null);
         }
       });
 
-      // Crear una serie por cada situación que tenga datos
-      Object.entries(datosPorSituacion).forEach(([situacion, datos]) => {
-        const situacionNum = parseInt(situacion);
-        const hayDatos = datos.some(dato => dato !== null);
-        
-        if (hayDatos) {
-          series.push({
-            data: datos,
-            label: `${nombreEntidad} (Sit. ${situacionNum})`,
-            color: obtenerColorPuntoSituacion(situacionNum),
-            connectNulls: false,
-          });
-        }
-      });
+      const coloresLinea = ['#1976d2', '#dc004e', '#ed6c02', '#2e7d32', '#9c27b0', '#d32f2f'];
+      
+      return {
+        data: datos,
+        label: nombreEntidad,
+        color: coloresLinea[index % coloresLinea.length],
+      };
     });
 
     // Calcular la suma total por período y verificar si mostrar puntos
@@ -477,13 +447,11 @@ const GraficoDeudas = () => {
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Visualización cronológica de la evolución de deudas por entidad financiera. 
             <br />
-            • <strong>Series por situación</strong>: Cada entidad se desglosa por situación crediticia con colores específicos
-            <br />
-            • <strong>Verde</strong>: Situación 1 (Normal) → <strong>Amarillo</strong>: Situación 3 → <strong>Rojo</strong>: Situación 5-6 (Crítica)
-            <br />
-            • <strong>Sin puntos</strong>: Cuando la situación es 0 (sin deuda) o monto es 0
+            • <strong>Sin puntos</strong>: Cuando la situación es 0 (sin deuda)
             <br />
             • <strong>Línea naranja "Total General"</strong>: Solo visible cuando hay múltiples entidades con deuda
+            <br />
+            • <strong>Cada entidad</strong>: Representada con un color diferente para facilitar la identificación
           </Typography>
           
           <Box sx={{ height: 400, mt: 2 }}>
