@@ -195,7 +195,7 @@ const GraficoDeudas = () => {
       setError(mensajeError);
       
       // En caso de error, mostrar datos de ejemplo para testing
-      if (process.env.NODE_ENV === 'development') {
+      if (import.meta.env.DEV) {
         console.log('Usando datos de ejemplo en modo desarrollo');
         setTimeout(() => {
           setDatosConsulta(datosEjemplo.results);
