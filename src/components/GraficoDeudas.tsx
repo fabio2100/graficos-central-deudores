@@ -12,8 +12,6 @@ import {
   CircularProgress,
   InputAdornment,
   Chip,
-  Tooltip,
-  IconButton,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -23,7 +21,6 @@ import {
   Warning as WarningIcon,
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
-  Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import { 
   LineChart, 
@@ -399,11 +396,11 @@ const GraficoDeudas = () => {
   const estadisticas = useMemo(() => {
     if (!datosConsulta?.periodos) return null;
 
-    const ultimoPeriodo = datosConsulta.periodos[datosConsulta.periodos.length - 1];
-    const totalDeuda = ultimoPeriodo.entidades.reduce((sum: number, entidad: Entidad) => sum + entidad.monto, 0);
-    const entidadesConDeuda = ultimoPeriodo.entidades.filter((entidad: Entidad) => entidad.monto > 0).length;
-    const totalEntidades = ultimoPeriodo.entidades.length;
-    const situacionMasAlta = Math.max(...ultimoPeriodo.entidades.map((entidad: Entidad) => entidad.situacion));
+    const primerPeriodo = datosConsulta.periodos[0]; // Tomar el primer período
+    const totalDeuda = primerPeriodo.entidades.reduce((sum: number, entidad: Entidad) => sum + entidad.monto, 0);
+    const entidadesConDeuda = primerPeriodo.entidades.filter((entidad: Entidad) => entidad.monto > 0).length;
+    const totalEntidades = primerPeriodo.entidades.length;
+    const situacionMasAlta = Math.max(...primerPeriodo.entidades.map((entidad: Entidad) => entidad.situacion));
 
     return {
       totalDeuda,
@@ -495,8 +492,8 @@ const GraficoDeudas = () => {
 
       {/* Estadísticas */}
       {estadisticas && (
-        <Box sx={{ mb: 3, display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-          <Box sx={{ flex: 1, minWidth: 200 }}>
+        <Box sx={{ mb: 3, display: 'flex', justifyContent: 'center' }}>
+          <Box sx={{ minWidth: 200 }}>
             <Card elevation={2}>
               <CardContent sx={{ textAlign: 'center' }}>
                 <TrendingUpIcon sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
@@ -505,46 +502,6 @@ const GraficoDeudas = () => {
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Deuda Total
-                </Typography>
-              </CardContent>
-            </Card>
-          </Box>
-          <Box sx={{ flex: 1, minWidth: 200 }}>
-            <Card elevation={2}>
-              <CardContent sx={{ textAlign: 'center' }}>
-                <BusinessIcon sx={{ fontSize: 40, color: 'info.main', mb: 1 }} />
-                <Typography variant="h6" color="info.main">
-                  {estadisticas.entidadesConDeuda}/{estadisticas.totalEntidades}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Entidades con Deuda
-                </Typography>
-              </CardContent>
-            </Card>
-          </Box>
-          <Box sx={{ flex: 1, minWidth: 200 }}>
-            <Card elevation={2}>
-              <CardContent sx={{ textAlign: 'center' }}>
-                {obtenerIconoSituacion(estadisticas.situacionMasAlta)}
-                <Typography variant="h6" sx={{ color: obtenerColorSituacion(estadisticas.situacionMasAlta) }}>
-                  Situación {estadisticas.situacionMasAlta}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {obtenerTextoSituacion(estadisticas.situacionMasAlta)}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Box>
-          <Box sx={{ flex: 1, minWidth: 200 }}>
-            <Card elevation={2}>
-              <CardContent sx={{ textAlign: 'center' }}>
-                <Tooltip title="Recargar datos">
-                  <IconButton onClick={buscarDeudor} disabled={cargando}>
-                    <RefreshIcon sx={{ fontSize: 40, color: 'success.main' }} />
-                  </IconButton>
-                </Tooltip>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  Actualizar
                 </Typography>
               </CardContent>
             </Card>

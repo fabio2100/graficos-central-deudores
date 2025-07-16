@@ -7,14 +7,30 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <AppBar position="static" sx={{ mb: 4 }}>
+      <AppBar position="static">
         <Toolbar>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+          <Typography 
+            variant="h6" 
+            component="div" 
+            sx={{ 
+              flexGrow: 1,
+              textAlign: 'center'
+            }}
+          >
             Central de Deudores - BCRA
           </Typography>
         </Toolbar>
       </AppBar>
-      <Container maxWidth="lg">
+      <Container 
+        maxWidth="lg" 
+        sx={{ 
+          pt: 3,
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center'
+        }}
+      >
         <GraficoDeudas />
       </Container>
     </ThemeProvider>
