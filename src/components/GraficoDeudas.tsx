@@ -25,7 +25,16 @@ import {
   Error as ErrorIcon,
   Refresh as RefreshIcon,
 } from '@mui/icons-material';
-import { LineChart } from '@mui/x-charts/LineChart';
+import { 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip as RechartsTooltip, 
+  Legend, 
+  ResponsiveContainer,
+} from 'recharts';
 import type { ResultadoBCRA, Entidad, Periodo } from '../types';
 import { datosEjemplo } from '../utils/datosEjemplo';
 
@@ -106,6 +115,113 @@ const validarCuitCuil = (numero: string): boolean => {
   if (digitoVerificador === 10) digitoVerificador = 9;
   
   return digitoVerificador === parseInt(numeroLimpio[10]);
+};
+
+// Tipos para el tooltip personalizado
+interface TooltipData {
+  dataKey: string;
+  value: number;
+  color: string;
+  payload?: Record<string, string | number | null>;
+}
+
+// Componente de tooltip personalizado para Recharts
+const TooltipPersonalizado = ({ active, payload, label }: {
+  active?: boolean;
+  payload?: TooltipData[];
+  label?: string;
+}) => {
+  if (active && payload && payload.length) {
+    return (
+      <Box
+        sx={{
+          backgroundColor: '#424242',
+          border: '1px solid #616161',
+          borderRadius: 1,
+          padding: 2,
+          boxShadow: 3,
+          minWidth: 200,
+        }}
+      >
+        <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1, color: 'white' }}>
+          Período: {label}
+        </Typography>
+        {payload
+          .filter((entry: TooltipData) => entry.value !== null && entry.value !== undefined)
+          .sort((a: TooltipData, b: TooltipData) => (b.value as number) - (a.value as number))
+          .map((entry: TooltipData, index: number) => {
+            // Obtener la situación para esta entidad y usar su color
+            const situacionKey = `${entry.dataKey}_situacion`;
+            const situacion = entry.payload?.[situacionKey];
+            const colorSituacion = situacion && typeof situacion === 'number' ? obtenerColorSituacionPunto(situacion) : entry.color;
+            
+            return (
+              <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+                <Box
+                  sx={{
+                    width: 12,
+                    height: 12,
+                    backgroundColor: entry.dataKey === 'Total General' ? entry.color : colorSituacion,
+                    borderRadius: '50%',
+                    mr: 1,
+                  }}
+                />
+                <Typography variant="body2" sx={{ flex: 1, color: '#e0e0e0' }}>
+                  {entry.dataKey}:
+                </Typography>
+                <Typography variant="body2" sx={{ fontWeight: 'bold', ml: 1, color: 'white' }}>
+                  ${(entry.value as number).toLocaleString('es-AR')}
+                </Typography>
+              </Box>
+            );
+          })}
+      </Box>
+    );
+  }
+  return null;
+};
+
+// Función para obtener el color del punto según la situación crediticia
+const obtenerColorSituacionPunto = (situacion: number): string => {
+  switch (situacion) {
+    case 0: return '#4caf50'; // Verde - Sin deuda
+    case 1: return '#66bb6a'; // Verde - Normal
+    case 2: return '#ffb74d'; // Amarillo/Naranja claro - Con seguimiento
+    case 3: return '#ff8a65'; // Naranja - En problemas
+    case 4: return '#ef5350'; // Rojo claro - Irrecuperable prejudicial
+    case 5: return '#f44336'; // Rojo - Irrecuperable por disposición técnica
+    case 6: return '#d32f2f'; // Rojo oscuro - Irrecuperable por disposición técnica
+    default: return '#757575'; // Gris por defecto
+  }
+};
+
+// Componente personalizado para puntos del gráfico con colores según situación
+const PuntoPersonalizado = (props: { cx?: number; cy?: number; payload?: Record<string, string | number | null>; dataKey?: string }) => {
+  const { cx, cy, payload, dataKey } = props;
+  
+  // Obtener la situación para esta entidad en este período
+  const situacionKey = `${dataKey}_situacion`;
+  const situacion = payload?.[situacionKey];
+  
+  // Si no hay situación (valor null), no mostrar el punto
+  if (situacion === null || situacion === undefined) {
+    return null;
+  }
+  
+  const color = typeof situacion === 'number' ? obtenerColorSituacionPunto(situacion) : '#757575';
+  const esTotal = dataKey === 'Total General';
+  
+  return (
+    <circle
+      cx={cx}
+      cy={cy}
+      r={esTotal ? 6 : 5}
+      fill={esTotal ? '#ff9800' : color}
+      stroke={esTotal ? '#ff9800' : color}
+      strokeWidth={2}
+      style={{ cursor: 'pointer' }}
+    />
+  );
 };
 
 const GraficoDeudas = () => {
@@ -207,7 +323,7 @@ const GraficoDeudas = () => {
     }
   };
 
-  // Preparar datos para el gráfico
+  // Preparar datos para el gráfico con Recharts
   const datosGrafico = useMemo(() => {
     if (!datosConsulta?.periodos) return null;
 
@@ -224,59 +340,59 @@ const GraficoDeudas = () => {
       parseInt(a.periodo) - parseInt(b.periodo)
     );
 
-    const xAxisData = periodosOrdenados.map((periodo: Periodo) => {
+    // Transformar datos para Recharts (formato de array de objetos)
+    const datos = periodosOrdenados.map((periodo: Periodo) => {
       const año = periodo.periodo.substring(0, 4);
       const mes = periodo.periodo.substring(4, 6);
-      return `${mes}/${año}`;
-    });
+      const periodoFormateado = `${mes}/${año}`;
+      
+      const puntoData: Record<string, string | number | null> = {
+        periodo: periodoFormateado,
+        periodoCompleto: `${mes}/${año}`,
+      };
 
-    // Crear series para cada entidad
-    const series = entidadesUnicas.map((nombreEntidad, index) => {
-      const datos: (number | null)[] = [];
-
-      periodosOrdenados.forEach((periodo: Periodo) => {
+      // Agregar datos de cada entidad
+      entidadesUnicas.forEach((nombreEntidad) => {
         const entidad = periodo.entidades.find((e: Entidad) => e.entidad === nombreEntidad);
         if (entidad && entidad.situacion !== 0) {
-          // Solo agregar el punto si la situación no es 0
-          datos.push(entidad.monto);
+          puntoData[nombreEntidad] = entidad.monto;
+          // Agregar información de situación para cada entidad y período
+          puntoData[`${nombreEntidad}_situacion`] = entidad.situacion;
         } else {
-          // Si no hay entidad o situación es 0, usar null para no dibujar el punto
-          datos.push(null);
+          puntoData[nombreEntidad] = null;
+          puntoData[`${nombreEntidad}_situacion`] = null;
         }
       });
 
-      const coloresLinea = ['#1976d2', '#dc004e', '#ed6c02', '#2e7d32', '#9c27b0', '#d32f2f'];
-      
-      return {
-        data: datos,
-        label: nombreEntidad,
-        color: coloresLinea[index % coloresLinea.length],
-      };
-    });
-
-    // Calcular la suma total por período y verificar si mostrar puntos
-    const datosTotal: (number | null)[] = [];
-    
-    periodosOrdenados.forEach((periodo: Periodo) => {
+      // Calcular total solo si hay más de una entidad con deuda
       const entidadesConDeuda = periodo.entidades.filter((entidad: Entidad) => entidad.monto > 0);
       const totalPeriodo = periodo.entidades.reduce((suma: number, entidad: Entidad) => suma + entidad.monto, 0);
       
-      // Solo mostrar punto de total si hay más de 1 entidad con deuda
       if (entidadesConDeuda.length > 1) {
-        datosTotal.push(totalPeriodo);
+        puntoData['Total General'] = totalPeriodo;
       } else {
-        datosTotal.push(null);
+        puntoData['Total General'] = null;
       }
+
+      return puntoData;
     });
 
-    // Agregar la serie de total
-    series.push({
-      data: datosTotal,
-      label: 'Total General',
-      color: '#ff9800', // Color naranja para destacar
-    });
+    // Configuración de colores para las líneas
+    const coloresLinea = ['#1976d2', '#dc004e', '#ed6c02', '#2e7d32', '#9c27b0', '#d32f2f'];
+    const coloresEntidades = [...entidadesUnicas, 'Total General'].reduce((acc, entidad, index) => {
+      if (entidad === 'Total General') {
+        acc[entidad] = '#ff9800'; // Color naranja para total
+      } else {
+        acc[entidad] = coloresLinea[index % coloresLinea.length];
+      }
+      return acc;
+    }, {} as Record<string, string>);
 
-    return { xAxisData, series };
+    return { 
+      datos, 
+      entidades: [...entidadesUnicas, 'Total General'],
+      colores: coloresEntidades
+    };
   }, [datosConsulta]);
 
   // Calcular estadísticas
@@ -445,29 +561,60 @@ const GraficoDeudas = () => {
           </Typography>
           
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Visualización cronológica de la evolución de deudas por entidad financiera. 
+            Visualización cronológica de la evolución de deudas por entidad financiera utilizando Recharts.
             <br />
             • <strong>Sin puntos</strong>: Cuando la situación es 0 (sin deuda)
             <br />
-            • <strong>Línea naranja "Total General"</strong>: Solo visible cuando hay múltiples entidades con deuda
+            • <strong>Colores de puntos por situación</strong>: Verde (situación 1), Amarillo-Naranja (situaciones 2-3), Rojo (situaciones 4-5)
             <br />
-            • <strong>Cada entidad</strong>: Representada con un color diferente para facilitar la identificación
+            • <strong>Línea naranja gruesa "Total General"</strong>: Solo visible cuando hay múltiples entidades con deuda
             <br />
-            • <strong>Tooltip</strong>: Muestra información detallada al pasar el cursor sobre el gráfico
+            • <strong>Cada entidad</strong>: Representada con color de línea específico y puntos que reflejan el riesgo crediticio
+            <br />
+            • <strong>Tooltip interactivo</strong>: Muestra el monto de deuda al pasar el cursor sobre cualquier punto
+            <br />
+            • <strong>Leyenda interactiva</strong>: Haga clic en las etiquetas para mostrar/ocultar series específicas
           </Typography>
           
-          <Box sx={{ height: 400, mt: 2 }}>
-            <LineChart
-              xAxis={[{ 
-                scaleType: 'point', 
-                data: datosGrafico.xAxisData,
-                label: 'Período'
-              }]}
-              series={datosGrafico.series}
-              height={400}
-              margin={{ left: 100, right: 50, top: 50, bottom: 100 }}
-              grid={{ horizontal: true, vertical: true }}
-            />
+          <Box sx={{ width: '100%', height: 400, mt: 2 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={datosGrafico.datos}
+                margin={{ top: 20, right: 30, left: 40, bottom: 60 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                <XAxis 
+                  dataKey="periodo" 
+                  tick={{ fontSize: 12 }}
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
+                  interval={0}
+                />
+                <YAxis 
+                  tick={{ fontSize: 12 }}
+                  tickFormatter={(value) => `$${value.toLocaleString('es-AR')}`}
+                />
+                <RechartsTooltip content={<TooltipPersonalizado />} />
+                <Legend 
+                  wrapperStyle={{ paddingTop: '20px' }}
+                  iconType="line"
+                />
+                
+                {datosGrafico.entidades.map((entidad) => (
+                  <Line
+                    key={entidad}
+                    type="monotone"
+                    dataKey={entidad}
+                    stroke={datosGrafico.colores[entidad]}
+                    strokeWidth={entidad === 'Total General' ? 3 : 2}
+                    dot={<PuntoPersonalizado dataKey={entidad} />}
+                    connectNulls={false}
+                    name={entidad}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
           </Box>
         </Paper>
       )}
