@@ -12,6 +12,7 @@ import {
   CircularProgress,
   InputAdornment,
   Chip,
+  useTheme,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -46,6 +47,20 @@ ChartJS.register(
   Tooltip,
   Legend
 );
+
+// Función para obtener el color según la situación (para puntos del gráfico)
+const obtenerColorPorSituacion = (situacion: number): string => {
+  switch (situacion) {
+    case 0: return '#9e9e9e'; // Gris - Sin deuda (no se debería mostrar)
+    case 1: return '#4caf50'; // Verde - Normal
+    case 2: return '#8bc34a'; // Verde claro - Con seguimiento
+    case 3: return '#ff9800'; // Naranja - En problemas
+    case 4: return '#ff5722'; // Rojo naranja - Irrecuperable prejudicial
+    case 5: return '#f44336'; // Rojo - Irrecuperable por disposición técnica
+    case 6: return '#d32f2f'; // Rojo oscuro - Irrecuperable por disposición técnica
+    default: return '#757575'; // Gris por defecto
+  }
+};
 
 // Función para obtener el color según la situación (para tarjetas y chips)
 const obtenerColorSituacion = (situacion: number): string => {
@@ -127,6 +142,9 @@ const validarCuitCuil = (numero: string): boolean => {
 };
 
 const GraficoDeudas = () => {
+  const theme = useTheme();
+  const modoOscuro = theme.palette.mode === 'dark';
+  
   const [numeroIdentificacion, setNumeroIdentificacion] = useState<string>('');
   const [cargando, setCargando] = useState<boolean>(false);
   const [datosConsulta, setDatosConsulta] = useState<ResultadoBCRA | null>(null);
@@ -249,8 +267,10 @@ const GraficoDeudas = () => {
       return `${mes}/${año}`;
     });
 
-    // Configuración de colores para las líneas
-    const coloresLinea = ['#1976d2', '#dc004e', '#ed6c02', '#2e7d32', '#9c27b0', '#d32f2f'];
+    // Configuración de colores para las líneas (adaptado para modo oscuro)
+    const coloresLinea = modoOscuro 
+      ? ['#90caf9', '#f48fb1', '#ffcc02', '#81c784', '#ce93d8', '#ff8a65'] // Colores más claros para modo oscuro
+      : ['#1976d2', '#dc004e', '#ed6c02', '#2e7d32', '#9c27b0', '#d32f2f']; // Colores originales para modo claro
 
     // Preparar datasets
     const datasets = entidadesUnicas.map((entidad, index) => {
@@ -259,14 +279,43 @@ const GraficoDeudas = () => {
         return entidadData && entidadData.situacion !== 0 ? entidadData.monto : null;
       });
 
+      // Preparar colores de puntos basados en la situación
+      const pointBackgroundColor = periodosOrdenados.map((periodo: Periodo) => {
+        const entidadData = periodo.entidades.find((e: Entidad) => e.entidad === entidad);
+        if (!entidadData || entidadData.situacion === 0) {
+          return 'transparent'; // Sin punto visible para situación 0
+        }
+        return obtenerColorPorSituacion(entidadData.situacion);
+      });
+
+      // Preparar colores de borde de puntos (un poco más oscuros)
+      const pointBorderColor = periodosOrdenados.map((periodo: Periodo) => {
+        const entidadData = periodo.entidades.find((e: Entidad) => e.entidad === entidad);
+        if (!entidadData || entidadData.situacion === 0) {
+          return 'transparent';
+        }
+        const baseColor = obtenerColorPorSituacion(entidadData.situacion);
+        // Hacer el borde un poco más oscuro
+        if (baseColor === '#4caf50') return '#388e3c';
+        if (baseColor === '#8bc34a') return '#689f38';
+        if (baseColor === '#ff9800') return '#f57c00';
+        if (baseColor === '#ff5722') return '#e64a19';
+        if (baseColor === '#f44336') return '#d32f2f';
+        if (baseColor === '#d32f2f') return '#b71c1c';
+        return '#424242';
+      });
+
       return {
         label: entidad,
         data,
         borderColor: coloresLinea[index % coloresLinea.length],
         backgroundColor: coloresLinea[index % coloresLinea.length] + '20',
         borderWidth: 2,
-        pointRadius: 4,
-        pointHoverRadius: 6,
+        pointRadius: 4, // Reducido de 6 a 4
+        pointHoverRadius: 6, // Reducido de 8 a 6
+        pointBackgroundColor, // Colores de puntos basados en situación
+        pointBorderColor, // Bordes de puntos más oscuros
+        pointBorderWidth: 2, // Grosor del borde del punto
         tension: 0.1,
         spanGaps: false,
       };
@@ -283,14 +332,22 @@ const GraficoDeudas = () => {
         return null;
       });
 
+      // Para el total general, usar un color dorado/naranja constante
+      const colorTotalGeneral = modoOscuro ? '#ffb74d' : '#ff9800';
+      const pointBackgroundColorTotal = periodosOrdenados.map(() => colorTotalGeneral);
+      const pointBorderColorTotal = periodosOrdenados.map(() => '#f57c00' as const); // Usar un color ya definido con tipo literal
+
       datasets.push({
         label: 'Total General',
         data: totalData,
-        borderColor: '#ff9800',
-        backgroundColor: '#ff980020',
+        borderColor: colorTotalGeneral,
+        backgroundColor: colorTotalGeneral + '20',
         borderWidth: 3,
-        pointRadius: 5,
-        pointHoverRadius: 7,
+        pointRadius: 5, // Reducido de 7 a 5
+        pointHoverRadius: 7, // Reducido de 9 a 7
+        pointBackgroundColor: pointBackgroundColorTotal,
+        pointBorderColor: pointBorderColorTotal,
+        pointBorderWidth: 2,
         tension: 0.1,
         spanGaps: false,
       });
@@ -320,14 +377,17 @@ const GraficoDeudas = () => {
     };
   }, [datosConsulta]);
 
-  // Configuración de opciones para Chart.js
+  // Configuración de opciones para Chart.js (adaptado para modo oscuro)
   const opcionesGrafico = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
       legend: {
         position: 'top' as const,
-        display: datosGrafico ? datosGrafico.datasets.length <= 8 : true,
+        display: true, // Siempre mostrar la leyenda sin importar el número de entidades
+        labels: {
+          color: modoOscuro ? '#ffffff' : '#333333', // Color del texto de la leyenda
+        }
       },
       title: {
         display: true,
@@ -336,13 +396,13 @@ const GraficoDeudas = () => {
           size: 16,
           weight: 'bold' as const,
         },
-        color: '#1976d2',
+        color: modoOscuro ? '#90caf9' : '#1976d2', // Color del título
       },
       tooltip: {
-        backgroundColor: '#424242',
-        titleColor: 'white',
-        bodyColor: 'white',
-        borderColor: '#616161',
+        backgroundColor: modoOscuro ? '#2c2c2c' : '#424242',
+        titleColor: '#ffffff',
+        bodyColor: '#ffffff',
+        borderColor: modoOscuro ? '#555555' : '#616161',
         borderWidth: 1,
         callbacks: {
           label: function(context: any) {
@@ -358,23 +418,33 @@ const GraficoDeudas = () => {
         display: true,
         title: {
           display: true,
-          text: 'Período'
+          text: 'Período',
+          color: modoOscuro ? '#ffffff' : '#333333', // Color del título del eje X
         },
         ticks: {
           maxRotation: 45,
-          minRotation: 45
+          minRotation: 45,
+          color: modoOscuro ? '#cccccc' : '#666666', // Color de las etiquetas del eje X
+        },
+        grid: {
+          color: modoOscuro ? '#444444' : '#e0e0e0', // Color de las líneas de grilla
         }
       },
       y: {
         display: true,
         title: {
           display: true,
-          text: 'Monto ($)'
+          text: 'Monto ($)',
+          color: modoOscuro ? '#ffffff' : '#333333', // Color del título del eje Y
         },
         ticks: {
+          color: modoOscuro ? '#cccccc' : '#666666', // Color de las etiquetas del eje Y
           callback: function(value: any) {
             return `$${value.toLocaleString('es-AR')}`;
           }
+        },
+        grid: {
+          color: modoOscuro ? '#444444' : '#e0e0e0', // Color de las líneas de grilla
         }
       }
     },
@@ -384,14 +454,14 @@ const GraficoDeudas = () => {
     },
     elements: {
       point: {
-        radius: 4,
-        hoverRadius: 6,
+        radius: 4, // Reducido de 4 a tamaño base más pequeño
+        hoverRadius: 6, // Reducido de 6 para hover
       },
       line: {
         tension: 0.1,
       }
     }
-  }), [datosGrafico]);
+  }), [datosGrafico, modoOscuro]);
 
   return (
     <Box sx={{ width: '100%' }}>
@@ -522,13 +592,25 @@ const GraficoDeudas = () => {
             <br />
             • <strong>Línea naranja gruesa "Total General"</strong>: Solo visible cuando hay múltiples entidades con deuda
             <br />
+            • <strong>Colores de puntos según situación</strong>: 
+              <span style={{color: '#4caf50', fontWeight: 'bold'}}>Verde (Situación 1)</span> → 
+              <span style={{color: '#8bc34a', fontWeight: 'bold'}}>Verde claro (Situación 2)</span> → 
+              <span style={{color: '#ff9800', fontWeight: 'bold'}}>Naranja (Situación 3)</span> → 
+              <span style={{color: '#ff5722', fontWeight: 'bold'}}>Rojo naranja (Situación 4)</span> → 
+              <span style={{color: '#f44336', fontWeight: 'bold'}}>Rojo (Situación 5+)</span>
+            <br />
             • <strong>Tooltip interactivo</strong>: Muestra el monto de deuda al pasar el cursor sobre cualquier punto
             <br />
             • <strong>Leyenda interactiva</strong>: Haga clic en las etiquetas para mostrar/ocultar series específicas
           </Typography>
           
           {/* Título del gráfico */}
-          <Typography variant="h6" sx={{ textAlign: 'center', mb: 2, fontWeight: 'bold', color: 'primary.main' }}>
+          <Typography variant="h6" sx={{ 
+            textAlign: 'center', 
+            mb: 2, 
+            fontWeight: 'bold', 
+            color: modoOscuro ? 'primary.light' : 'primary.main' 
+          }}>
             Deudas por período y entidad (en miles)
           </Typography>
           
@@ -538,10 +620,11 @@ const GraficoDeudas = () => {
               width: '100%',
               height: 600,
               mt: 2,
-              border: '1px solid #e0e0e0',
+              border: modoOscuro ? '1px solid #555555' : '1px solid #e0e0e0',
               borderRadius: 1,
               position: 'relative',
               padding: 2,
+              backgroundColor: modoOscuro ? '#1e1e1e' : '#ffffff',
             }}
           >
             <Line data={datosGrafico} options={opcionesGrafico} />
