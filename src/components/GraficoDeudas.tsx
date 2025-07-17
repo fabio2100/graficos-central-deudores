@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import axios from 'axios';
 import {
   Box,
@@ -138,6 +138,7 @@ const TooltipPersonalizado = ({ active, payload, label }: {
           padding: 2,
           boxShadow: 3,
           minWidth: 200,
+          maxWidth: 200,
         }}
       >
         <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1, color: 'white' }}>
@@ -212,10 +213,10 @@ const PuntoPersonalizado = (props: { cx?: number; cy?: number; payload?: Record<
     <circle
       cx={cx}
       cy={cy}
-      r={esTotal ? 6 : 5}
+      r={esTotal ? 4 : 3}
       fill={esTotal ? '#ff9800' : color}
       stroke={esTotal ? '#ff9800' : color}
-      strokeWidth={2}
+      strokeWidth={1.5}
       style={{ cursor: 'pointer' }}
     />
   );
@@ -226,6 +227,7 @@ const GraficoDeudas = () => {
   const [cargando, setCargando] = useState<boolean>(false);
   const [datosConsulta, setDatosConsulta] = useState<ResultadoBCRA | null>(null);
   const [error, setError] = useState<string>('');
+  const graficoContainerRef = useRef<HTMLDivElement>(null);
 
   // Manejar cambio en el input con formateo automático
   const manejarCambioNumero = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -410,6 +412,19 @@ const GraficoDeudas = () => {
     };
   }, [datosConsulta]);
 
+  // Efecto para posicionar el scroll al extremo derecho cuando se carga el gráfico
+  useEffect(() => {
+    if (datosGrafico && graficoContainerRef.current) {
+      const container = graficoContainerRef.current;
+      // Pequeño delay para asegurar que el contenido se haya renderizado
+      setTimeout(() => {
+        if (container.scrollWidth > container.clientWidth) {
+          container.scrollLeft = container.scrollWidth - container.clientWidth;
+        }
+      }, 100);
+    }
+  }, [datosGrafico]);
+
   return (
     <Box sx={{ width: '100%' }}>
       {/* Sección de búsqueda */}
@@ -492,16 +507,29 @@ const GraficoDeudas = () => {
 
       {/* Estadísticas */}
       {estadisticas && (
-        <Box sx={{ mb: 3, display: 'flex', justifyContent: 'center' }}>
+        <Box sx={{ mb: 3, display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
           <Box sx={{ minWidth: 200 }}>
             <Card elevation={2}>
               <CardContent sx={{ textAlign: 'center' }}>
                 <TrendingUpIcon sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
                 <Typography variant="h6" color="primary">
-                  ${estadisticas.totalDeuda.toLocaleString('es-AR')}
+                  ${estadisticas.totalDeuda.toLocaleString('es-AR')}.000
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Deuda Total
+                  Deuda Total Actual
+                </Typography>
+              </CardContent>
+            </Card>
+          </Box>
+          <Box sx={{ minWidth: 200 }}>
+            <Card elevation={2}>
+              <CardContent sx={{ textAlign: 'center' }}>
+                <BusinessIcon sx={{ fontSize: 40, color: 'info.main', mb: 1 }} />
+                <Typography variant="h6" color="info.main">
+                  {estadisticas.entidadesConDeuda}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Entidades con Deuda
                 </Typography>
               </CardContent>
             </Card>
@@ -533,45 +561,95 @@ const GraficoDeudas = () => {
             • <strong>Leyenda interactiva</strong>: Haga clic en las etiquetas para mostrar/ocultar series específicas
           </Typography>
           
-          <Box sx={{ width: '100%', height: 400, mt: 2 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart
-                data={datosGrafico.datos}
-                margin={{ top: 20, right: 30, left: 40, bottom: 60 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                <XAxis 
-                  dataKey="periodo" 
-                  tick={{ fontSize: 12 }}
-                  angle={-45}
-                  textAnchor="end"
-                  height={80}
-                  interval={0}
-                />
-                <YAxis 
-                  tick={{ fontSize: 12 }}
-                  tickFormatter={(value) => `$${value.toLocaleString('es-AR')}`}
-                />
-                <RechartsTooltip content={<TooltipPersonalizado />} />
-                <Legend 
-                  wrapperStyle={{ paddingTop: '20px' }}
-                  iconType="line"
-                />
-                
-                {datosGrafico.entidades.map((entidad) => (
-                  <Line
-                    key={entidad}
-                    type="monotone"
-                    dataKey={entidad}
-                    stroke={datosGrafico.colores[entidad]}
-                    strokeWidth={entidad === 'Total General' ? 3 : 2}
-                    dot={<PuntoPersonalizado dataKey={entidad} />}
-                    connectNulls={false}
-                    name={entidad}
-                  />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
+          {/* Título del gráfico */}
+          <Typography variant="h6" sx={{ textAlign: 'center', mb: 2, fontWeight: 'bold', color: 'primary.main' }}>
+            Deudas por período y entidad (en miles)
+          </Typography>
+          
+          {/* Contenedor del gráfico con scroll aislado */}
+          <Box 
+            sx={{ 
+              width: '100%',
+              height: 600,
+              mt: 2,
+              border: '1px solid #e0e0e0',
+              borderRadius: 1,
+              position: 'relative',
+              overflow: 'hidden' // Ocultar cualquier overflow del contenedor padre
+            }}
+          >
+            <Box 
+              ref={graficoContainerRef}
+              sx={{ 
+                width: '100%',
+                height: '100%',
+                overflowX: 'auto',
+                overflowY: 'hidden',
+                '&::-webkit-scrollbar': {
+                  height: 8,
+                },
+                '&::-webkit-scrollbar-track': {
+                  backgroundColor: '#f1f1f1',
+                },
+                '&::-webkit-scrollbar-thumb': {
+                  backgroundColor: '#888',
+                  borderRadius: 4,
+                },
+                '&::-webkit-scrollbar-thumb:hover': {
+                  backgroundColor: '#555',
+                }
+              }}
+            >
+              <Box sx={{ 
+                width: 700, // Ancho dinámico basado en cantidad de períodos
+                height: 600,
+                flexShrink: 0 // Evitar que se encoja
+              }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={datosGrafico.datos}
+                    margin={{ top: 20, right: 30, left: 40, bottom: 60 }}
+                    className='grafico-deudas'
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0"/>
+                    <XAxis 
+                      dataKey="periodo" 
+                      tick={{ fontSize: 12 }}
+                      angle={-45}
+                      textAnchor="end"
+                      height={80}
+                      interval={0}
+                      minTickGap={20}
+                      tickMargin={10}
+                    />
+                    <YAxis 
+                      tick={{ fontSize: 12 }}
+                      tickFormatter={(value) => `$${value.toLocaleString('es-AR')}`}
+                    />
+                    <RechartsTooltip content={<TooltipPersonalizado />} />
+                    {datosGrafico.entidades.length <= 8 && (
+                      <Legend 
+                        wrapperStyle={{ paddingTop: '20px' }}
+                        iconType="line"
+                      />
+                    )}
+                    
+                    {datosGrafico.entidades.map((entidad) => (
+                      <Line
+                        key={entidad}
+                        type="monotone"
+                        dataKey={entidad}
+                        stroke={datosGrafico.colores[entidad]}
+                        strokeWidth={entidad === 'Total General' ? 3 : 2}
+                        dot={<PuntoPersonalizado dataKey={entidad} />}
+                        connectNulls={false}
+                        name={entidad}
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </Box>
+            </Box>
           </Box>
         </Paper>
       )}
@@ -632,7 +710,7 @@ const GraficoDeudas = () => {
                       
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                         <Typography variant="h5" color="primary">
-                          ${entidad.monto.toLocaleString('es-AR')}
+                          ${entidad.monto.toLocaleString('es-AR')}.000
                         </Typography>
                         <Chip
                           icon={obtenerIconoSituacion(entidad.situacion)}

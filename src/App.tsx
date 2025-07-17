@@ -2,6 +2,7 @@ import { ThemeProvider } from '@mui/material/styles';
 import { CssBaseline, Container, AppBar, Toolbar, Typography } from '@mui/material';
 import { theme } from './theme/theme';
 import GraficoDeudas from './components/GraficoDeudas';
+import './App.css';
 
 function App() {
   return (
