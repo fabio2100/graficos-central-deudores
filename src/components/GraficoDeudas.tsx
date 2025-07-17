@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import axios from 'axios';
 import {
   Box,
@@ -22,18 +22,30 @@ import {
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
 } from '@mui/icons-material';
-import { 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip as RechartsTooltip, 
-  Legend, 
-  ResponsiveContainer,
-} from 'recharts';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+} from 'chart.js';
+import { Line } from 'react-chartjs-2';
 import type { ResultadoBCRA, Entidad, Periodo } from '../types';
 import { datosEjemplo } from '../utils/datosEjemplo';
+
+// Registrar los componentes necesarios de Chart.js
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
 // Función para obtener el color según la situación (para tarjetas y chips)
 const obtenerColorSituacion = (situacion: number): string => {
@@ -114,120 +126,11 @@ const validarCuitCuil = (numero: string): boolean => {
   return digitoVerificador === parseInt(numeroLimpio[10]);
 };
 
-// Tipos para el tooltip personalizado
-interface TooltipData {
-  dataKey: string;
-  value: number;
-  color: string;
-  payload?: Record<string, string | number | null>;
-}
-
-// Componente de tooltip personalizado para Recharts
-const TooltipPersonalizado = ({ active, payload, label }: {
-  active?: boolean;
-  payload?: TooltipData[];
-  label?: string;
-}) => {
-  if (active && payload && payload.length) {
-    return (
-      <Box
-        sx={{
-          backgroundColor: '#424242',
-          border: '1px solid #616161',
-          borderRadius: 1,
-          padding: 2,
-          boxShadow: 3,
-          minWidth: 200,
-          maxWidth: 200,
-        }}
-      >
-        <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1, color: 'white' }}>
-          Período: {label}
-        </Typography>
-        {payload
-          .filter((entry: TooltipData) => entry.value !== null && entry.value !== undefined)
-          .sort((a: TooltipData, b: TooltipData) => (b.value as number) - (a.value as number))
-          .map((entry: TooltipData, index: number) => {
-            // Obtener la situación para esta entidad y usar su color
-            const situacionKey = `${entry.dataKey}_situacion`;
-            const situacion = entry.payload?.[situacionKey];
-            const colorSituacion = situacion && typeof situacion === 'number' ? obtenerColorSituacionPunto(situacion) : entry.color;
-            
-            return (
-              <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-                <Box
-                  sx={{
-                    width: 12,
-                    height: 12,
-                    backgroundColor: entry.dataKey === 'Total General' ? entry.color : colorSituacion,
-                    borderRadius: '50%',
-                    mr: 1,
-                  }}
-                />
-                <Typography variant="body2" sx={{ flex: 1, color: '#e0e0e0' }}>
-                  {entry.dataKey}:
-                </Typography>
-                <Typography variant="body2" sx={{ fontWeight: 'bold', ml: 1, color: 'white' }}>
-                  ${(entry.value as number).toLocaleString('es-AR')}
-                </Typography>
-              </Box>
-            );
-          })}
-      </Box>
-    );
-  }
-  return null;
-};
-
-// Función para obtener el color del punto según la situación crediticia
-const obtenerColorSituacionPunto = (situacion: number): string => {
-  switch (situacion) {
-    case 0: return '#4caf50'; // Verde - Sin deuda
-    case 1: return '#66bb6a'; // Verde - Normal
-    case 2: return '#ffb74d'; // Amarillo/Naranja claro - Con seguimiento
-    case 3: return '#ff8a65'; // Naranja - En problemas
-    case 4: return '#ef5350'; // Rojo claro - Irrecuperable prejudicial
-    case 5: return '#f44336'; // Rojo - Irrecuperable por disposición técnica
-    case 6: return '#d32f2f'; // Rojo oscuro - Irrecuperable por disposición técnica
-    default: return '#757575'; // Gris por defecto
-  }
-};
-
-// Componente personalizado para puntos del gráfico con colores según situación
-const PuntoPersonalizado = (props: { cx?: number; cy?: number; payload?: Record<string, string | number | null>; dataKey?: string }) => {
-  const { cx, cy, payload, dataKey } = props;
-  
-  // Obtener la situación para esta entidad en este período
-  const situacionKey = `${dataKey}_situacion`;
-  const situacion = payload?.[situacionKey];
-  
-  // Si no hay situación (valor null), no mostrar el punto
-  if (situacion === null || situacion === undefined) {
-    return null;
-  }
-  
-  const color = typeof situacion === 'number' ? obtenerColorSituacionPunto(situacion) : '#757575';
-  const esTotal = dataKey === 'Total General';
-  
-  return (
-    <circle
-      cx={cx}
-      cy={cy}
-      r={esTotal ? 4 : 3}
-      fill={esTotal ? '#ff9800' : color}
-      stroke={esTotal ? '#ff9800' : color}
-      strokeWidth={1.5}
-      style={{ cursor: 'pointer' }}
-    />
-  );
-};
-
 const GraficoDeudas = () => {
   const [numeroIdentificacion, setNumeroIdentificacion] = useState<string>('');
   const [cargando, setCargando] = useState<boolean>(false);
   const [datosConsulta, setDatosConsulta] = useState<ResultadoBCRA | null>(null);
   const [error, setError] = useState<string>('');
-  const graficoContainerRef = useRef<HTMLDivElement>(null);
 
   // Manejar cambio en el input con formateo automático
   const manejarCambioNumero = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -322,7 +225,7 @@ const GraficoDeudas = () => {
     }
   };
 
-  // Preparar datos para el gráfico con Recharts
+  // Preparar datos para el gráfico con Chart.js
   const datosGrafico = useMemo(() => {
     if (!datosConsulta?.periodos) return null;
 
@@ -339,58 +242,63 @@ const GraficoDeudas = () => {
       parseInt(a.periodo) - parseInt(b.periodo)
     );
 
-    // Transformar datos para Recharts (formato de array de objetos)
-    const datos = periodosOrdenados.map((periodo: Periodo) => {
+    // Preparar etiquetas (períodos)
+    const labels = periodosOrdenados.map((periodo: Periodo) => {
       const año = periodo.periodo.substring(0, 4);
       const mes = periodo.periodo.substring(4, 6);
-      const periodoFormateado = `${mes}/${año}`;
-      
-      const puntoData: Record<string, string | number | null> = {
-        periodo: periodoFormateado,
-        periodoCompleto: `${mes}/${año}`,
-      };
-
-      // Agregar datos de cada entidad
-      entidadesUnicas.forEach((nombreEntidad) => {
-        const entidad = periodo.entidades.find((e: Entidad) => e.entidad === nombreEntidad);
-        if (entidad && entidad.situacion !== 0) {
-          puntoData[nombreEntidad] = entidad.monto;
-          // Agregar información de situación para cada entidad y período
-          puntoData[`${nombreEntidad}_situacion`] = entidad.situacion;
-        } else {
-          puntoData[nombreEntidad] = null;
-          puntoData[`${nombreEntidad}_situacion`] = null;
-        }
-      });
-
-      // Calcular total solo si hay más de una entidad con deuda
-      const entidadesConDeuda = periodo.entidades.filter((entidad: Entidad) => entidad.monto > 0);
-      const totalPeriodo = periodo.entidades.reduce((suma: number, entidad: Entidad) => suma + entidad.monto, 0);
-      
-      if (entidadesConDeuda.length > 1) {
-        puntoData['Total General'] = totalPeriodo;
-      } else {
-        puntoData['Total General'] = null;
-      }
-
-      return puntoData;
+      return `${mes}/${año}`;
     });
 
     // Configuración de colores para las líneas
     const coloresLinea = ['#1976d2', '#dc004e', '#ed6c02', '#2e7d32', '#9c27b0', '#d32f2f'];
-    const coloresEntidades = [...entidadesUnicas, 'Total General'].reduce((acc, entidad, index) => {
-      if (entidad === 'Total General') {
-        acc[entidad] = '#ff9800'; // Color naranja para total
-      } else {
-        acc[entidad] = coloresLinea[index % coloresLinea.length];
-      }
-      return acc;
-    }, {} as Record<string, string>);
 
-    return { 
-      datos, 
-      entidades: [...entidadesUnicas, 'Total General'],
-      colores: coloresEntidades
+    // Preparar datasets
+    const datasets = entidadesUnicas.map((entidad, index) => {
+      const data = periodosOrdenados.map((periodo: Periodo) => {
+        const entidadData = periodo.entidades.find((e: Entidad) => e.entidad === entidad);
+        return entidadData && entidadData.situacion !== 0 ? entidadData.monto : null;
+      });
+
+      return {
+        label: entidad,
+        data,
+        borderColor: coloresLinea[index % coloresLinea.length],
+        backgroundColor: coloresLinea[index % coloresLinea.length] + '20',
+        borderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        tension: 0.1,
+        spanGaps: false,
+      };
+    });
+
+    // Agregar dataset para Total General si hay múltiples entidades
+    const hayMultiplesEntidades = entidadesUnicas.length > 1;
+    if (hayMultiplesEntidades) {
+      const totalData = periodosOrdenados.map((periodo: Periodo) => {
+        const entidadesConDeuda = periodo.entidades.filter((entidad: Entidad) => entidad.monto > 0);
+        if (entidadesConDeuda.length > 1) {
+          return periodo.entidades.reduce((suma: number, entidad: Entidad) => suma + entidad.monto, 0);
+        }
+        return null;
+      });
+
+      datasets.push({
+        label: 'Total General',
+        data: totalData,
+        borderColor: '#ff9800',
+        backgroundColor: '#ff980020',
+        borderWidth: 3,
+        pointRadius: 5,
+        pointHoverRadius: 7,
+        tension: 0.1,
+        spanGaps: false,
+      });
+    }
+
+    return {
+      labels,
+      datasets,
     };
   }, [datosConsulta]);
 
@@ -412,18 +320,78 @@ const GraficoDeudas = () => {
     };
   }, [datosConsulta]);
 
-  // Efecto para posicionar el scroll al extremo derecho cuando se carga el gráfico
-  useEffect(() => {
-    if (datosGrafico && graficoContainerRef.current) {
-      const container = graficoContainerRef.current;
-      // Pequeño delay para asegurar que el contenido se haya renderizado
-      setTimeout(() => {
-        if (container.scrollWidth > container.clientWidth) {
-          container.scrollLeft = container.scrollWidth - container.clientWidth;
+  // Configuración de opciones para Chart.js
+  const opcionesGrafico = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top' as const,
+        display: datosGrafico ? datosGrafico.datasets.length <= 8 : true,
+      },
+      title: {
+        display: true,
+        text: 'Deudas por período y entidad (en miles)',
+        font: {
+          size: 16,
+          weight: 'bold' as const,
+        },
+        color: '#1976d2',
+      },
+      tooltip: {
+        backgroundColor: '#424242',
+        titleColor: 'white',
+        bodyColor: 'white',
+        borderColor: '#616161',
+        borderWidth: 1,
+        callbacks: {
+          label: function(context: any) {
+            const label = context.dataset.label || '';
+            const value = context.parsed.y;
+            return `${label}: $${value?.toLocaleString('es-AR') || 0}`;
+          }
         }
-      }, 100);
+      }
+    },
+    scales: {
+      x: {
+        display: true,
+        title: {
+          display: true,
+          text: 'Período'
+        },
+        ticks: {
+          maxRotation: 45,
+          minRotation: 45
+        }
+      },
+      y: {
+        display: true,
+        title: {
+          display: true,
+          text: 'Monto ($)'
+        },
+        ticks: {
+          callback: function(value: any) {
+            return `$${value.toLocaleString('es-AR')}`;
+          }
+        }
+      }
+    },
+    interaction: {
+      mode: 'index' as const,
+      intersect: false,
+    },
+    elements: {
+      point: {
+        radius: 4,
+        hoverRadius: 6,
+      },
+      line: {
+        tension: 0.1,
+      }
     }
-  }, [datosGrafico]);
+  }), [datosGrafico]);
 
   return (
     <Box sx={{ width: '100%' }}>
@@ -546,15 +514,13 @@ const GraficoDeudas = () => {
           </Typography>
           
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Visualización cronológica de la evolución de deudas por entidad financiera utilizando Recharts.
+            Visualización cronológica de la evolución de deudas por entidad financiera utilizando Chart.js.
             <br />
             • <strong>Sin puntos</strong>: Cuando la situación es 0 (sin deuda)
             <br />
-            • <strong>Colores de puntos por situación</strong>: Verde (situación 1), Amarillo-Naranja (situaciones 2-3), Rojo (situaciones 4-5)
+            • <strong>Líneas de colores</strong>: Cada entidad financiera tiene un color distintivo
             <br />
             • <strong>Línea naranja gruesa "Total General"</strong>: Solo visible cuando hay múltiples entidades con deuda
-            <br />
-            • <strong>Cada entidad</strong>: Representada con color de línea específico y puntos que reflejan el riesgo crediticio
             <br />
             • <strong>Tooltip interactivo</strong>: Muestra el monto de deuda al pasar el cursor sobre cualquier punto
             <br />
@@ -566,7 +532,7 @@ const GraficoDeudas = () => {
             Deudas por período y entidad (en miles)
           </Typography>
           
-          {/* Contenedor del gráfico con scroll aislado */}
+          {/* Contenedor del gráfico */}
           <Box 
             sx={{ 
               width: '100%',
@@ -575,82 +541,10 @@ const GraficoDeudas = () => {
               border: '1px solid #e0e0e0',
               borderRadius: 1,
               position: 'relative',
-              overflow: 'hidden' // Ocultar cualquier overflow del contenedor padre
+              padding: 2,
             }}
           >
-            <Box 
-              ref={graficoContainerRef}
-              sx={{ 
-                width: '100%',
-                height: '100%',
-                overflowX: 'auto',
-                overflowY: 'hidden',
-                '&::-webkit-scrollbar': {
-                  height: 8,
-                },
-                '&::-webkit-scrollbar-track': {
-                  backgroundColor: '#f1f1f1',
-                },
-                '&::-webkit-scrollbar-thumb': {
-                  backgroundColor: '#888',
-                  borderRadius: 4,
-                },
-                '&::-webkit-scrollbar-thumb:hover': {
-                  backgroundColor: '#555',
-                }
-              }}
-            >
-              <Box sx={{ 
-                width: '100%', // Tomar todo el ancho disponible
-                minWidth: 700, // Ancho mínimo de 700px
-                height: 600,
-                flexShrink: 0 // Evitar que se encoja
-              }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart
-                    data={datosGrafico.datos}
-                    margin={{ top: 20, right: 30, left: 40, bottom: 60 }}
-                    className='grafico-deudas'
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0"/>
-                    <XAxis 
-                      dataKey="periodo" 
-                      tick={{ fontSize: 12 }}
-                      angle={-45}
-                      textAnchor="end"
-                      height={80}
-                      interval={0}
-                      minTickGap={20}
-                      tickMargin={10}
-                    />
-                    <YAxis 
-                      tick={{ fontSize: 12 }}
-                      tickFormatter={(value) => `$${value.toLocaleString('es-AR')}`}
-                    />
-                    <RechartsTooltip content={<TooltipPersonalizado />} />
-                    {datosGrafico.entidades.length <= 8 && (
-                      <Legend 
-                        wrapperStyle={{ paddingTop: '20px' }}
-                        iconType="line"
-                      />
-                    )}
-                    
-                    {datosGrafico.entidades.map((entidad) => (
-                      <Line
-                        key={entidad}
-                        type="monotone"
-                        dataKey={entidad}
-                        stroke={datosGrafico.colores[entidad]}
-                        strokeWidth={entidad === 'Total General' ? 3 : 2}
-                        dot={<PuntoPersonalizado dataKey={entidad} />}
-                        connectNulls={false}
-                        name={entidad}
-                      />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-              </Box>
-            </Box>
+            <Line data={datosGrafico} options={opcionesGrafico} />
           </Box>
         </Paper>
       )}
