@@ -29,11 +29,12 @@ import {
   LinearScale,
   PointElement,
   LineElement,
+  BarElement,
   Title,
   Tooltip,
   Legend,
 } from 'chart.js';
-import { Line } from 'react-chartjs-2';
+import { Line, Bar } from 'react-chartjs-2';
 import type { ResultadoBCRA, Entidad, Periodo } from '../types';
 import { datosEjemplo } from '../utils/datosEjemplo';
 
@@ -43,6 +44,7 @@ ChartJS.register(
   LinearScale,
   PointElement,
   LineElement,
+  BarElement,
   Title,
   Tooltip,
   Legend
@@ -359,6 +361,82 @@ const GraficoDeudas = () => {
     };
   }, [datosConsulta]);
 
+  // Preparar datos para el gráfico de barras apiladas
+  const datosGraficoBarras = useMemo(() => {
+    if (!datosConsulta?.periodos) return null;
+
+    const entidadesUnicas = Array.from(
+      new Set(
+        datosConsulta.periodos.flatMap((periodo: Periodo) => 
+          periodo.entidades.map((entidad: Entidad) => entidad.entidad)
+        )
+      )
+    );
+
+    // Ordenar períodos cronológicamente
+    const periodosOrdenados = [...datosConsulta.periodos].sort((a, b) => 
+      parseInt(a.periodo) - parseInt(b.periodo)
+    );
+
+    // Preparar etiquetas (períodos)
+    const labels = periodosOrdenados.map((periodo: Periodo) => {
+      const año = periodo.periodo.substring(0, 4);
+      const mes = periodo.periodo.substring(4, 6);
+      return `${mes}/${año}`;
+    });
+
+    // Preparar datasets para barras apiladas
+    const datasets = entidadesUnicas.map((entidad) => {
+      const data = periodosOrdenados.map((periodo: Periodo) => {
+        const entidadData = periodo.entidades.find((e: Entidad) => e.entidad === entidad);
+        // Solo incluir si existe, situación no es 0 Y el monto es mayor a 0
+        return entidadData && entidadData.situacion !== 0 && entidadData.monto > 0 ? entidadData.monto : null;
+      });
+
+      // Colores de las barras basados en la situación de cada período
+      const backgroundColor = periodosOrdenados.map((periodo: Periodo) => {
+        const entidadData = periodo.entidades.find((e: Entidad) => e.entidad === entidad);
+        if (!entidadData || entidadData.situacion === 0) {
+          return 'transparent';
+        }
+        return obtenerColorPorSituacion(entidadData.situacion);
+      });
+
+      // Colores de borde más oscuros
+      const borderColor = periodosOrdenados.map((periodo: Periodo) => {
+        const entidadData = periodo.entidades.find((e: Entidad) => e.entidad === entidad);
+        if (!entidadData || entidadData.situacion === 0) {
+          return 'transparent';
+        }
+        const baseColor = obtenerColorPorSituacion(entidadData.situacion);
+        if (baseColor === '#4caf50') return '#388e3c';
+        if (baseColor === '#8bc34a') return '#689f38';
+        if (baseColor === '#ff9800') return '#f57c00';
+        if (baseColor === '#ff5722') return '#e64a19';
+        if (baseColor === '#f44336') return '#d32f2f';
+        if (baseColor === '#d32f2f') return '#b71c1c';
+        return '#424242';
+      });
+
+      return {
+        label: entidad,
+        data,
+        backgroundColor,
+        borderColor,
+        borderWidth: 2, // Aumentado de 1 a 2 para líneas divisorias más anchas
+        skipNull: true, // Omitir valores null en el gráfico
+      };
+    }).filter(dataset => {
+      // Filtrar datasets que tienen al menos un valor válido (no null)
+      return dataset.data.some(value => value !== null && value > 0);
+    });
+
+    return {
+      labels,
+      datasets,
+    };
+  }, [datosConsulta]);
+
   // Calcular estadísticas
   const estadisticas = useMemo(() => {
     if (!datosConsulta?.periodos) return null;
@@ -462,6 +540,92 @@ const GraficoDeudas = () => {
       }
     }
   }), [datosGrafico, modoOscuro]);
+
+  // Configuración de opciones para gráfico de barras apiladas
+  const opcionesGraficoBarras = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top' as const,
+        display: false, // Ocultar leyenda ya que se muestra en el gráfico de líneas
+      },
+      title: {
+        display: true,
+        text: 'Distribución de deudas por período (barras apiladas)',
+        font: {
+          size: 16,
+          weight: 'bold' as const,
+        },
+        color: modoOscuro ? '#90caf9' : '#1976d2',
+      },
+      tooltip: {
+        backgroundColor: modoOscuro ? '#2c2c2c' : '#424242',
+        titleColor: '#ffffff',
+        bodyColor: '#ffffff',
+        borderColor: modoOscuro ? '#555555' : '#616161',
+        borderWidth: 1,
+        callbacks: {
+          label: function(context: any) {
+            const label = context.dataset.label || '';
+            const value = context.parsed.y;
+            // Solo mostrar en tooltip si el valor es mayor a 0
+            if (value && value > 0) {
+              return `${label}: $${value?.toLocaleString('es-AR') || 0}`;
+            }
+            return undefined; // Usar undefined en lugar de null para compatibilidad
+          }
+        },
+        // Filtrar items del tooltip más estrictamente a nivel global
+        filter: function(tooltipItem: any) {
+          // Solo mostrar si el valor es válido, mayor a 0 y no es null/undefined
+          const value = tooltipItem.parsed?.y;
+          return value != null && value > 0;
+        }
+      }
+    },
+    scales: {
+      x: {
+        stacked: true,
+        display: true,
+        title: {
+          display: true,
+          text: 'Período',
+          color: modoOscuro ? '#ffffff' : '#333333',
+        },
+        ticks: {
+          maxRotation: 45,
+          minRotation: 45,
+          color: modoOscuro ? '#cccccc' : '#666666',
+        },
+        grid: {
+          color: modoOscuro ? '#444444' : '#e0e0e0',
+        }
+      },
+      y: {
+        stacked: true,
+        display: true,
+        title: {
+          display: true,
+          text: 'Monto ($)',
+          color: modoOscuro ? '#ffffff' : '#333333',
+        },
+        ticks: {
+          color: modoOscuro ? '#cccccc' : '#666666',
+          callback: function(value: any) {
+            return `$${value.toLocaleString('es-AR')}`;
+          }
+        },
+        grid: {
+          color: modoOscuro ? '#444444' : '#e0e0e0',
+        }
+      }
+    },
+    interaction: {
+      mode: 'index' as const,
+      intersect: false,
+    },
+  }), [modoOscuro]);
 
   return (
     <Box sx={{ width: '100%' }}>
@@ -628,6 +792,49 @@ const GraficoDeudas = () => {
             }}
           >
             <Line data={datosGrafico} options={opcionesGrafico} />
+          </Box>
+        </Paper>
+      )}
+
+      {/* Gráfico de barras apiladas */}
+      {datosGraficoBarras && (
+        <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
+          <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <TrendingUpIcon />
+            Distribución de Deudas por Período
+          </Typography>
+          
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Gráfico de barras apiladas que muestra la distribución de deudas por período.
+            <br />
+            • <strong>Cada barra</strong>: Representa un período temporal
+            <br />
+            • <strong>Segmentos de colores</strong>: Cada entidad con su color según situación
+            <br />
+            • <strong>Altura total</strong>: Suma de todas las deudas del período
+            <br />
+            • <strong>Colores por situación</strong>: 
+              <span style={{color: '#4caf50', fontWeight: 'bold'}}>Verde (Situación 1)</span> → 
+              <span style={{color: '#8bc34a', fontWeight: 'bold'}}>Verde claro (Situación 2)</span> → 
+              <span style={{color: '#ff9800', fontWeight: 'bold'}}>Naranja (Situación 3)</span> → 
+              <span style={{color: '#ff5722', fontWeight: 'bold'}}>Rojo naranja (Situación 4)</span> → 
+              <span style={{color: '#f44336', fontWeight: 'bold'}}>Rojo (Situación 5+)</span>
+          </Typography>
+          
+          {/* Contenedor del gráfico de barras */}
+          <Box 
+            sx={{ 
+              width: '100%',
+              height: 400,
+              mt: 2,
+              border: modoOscuro ? '1px solid #555555' : '1px solid #e0e0e0',
+              borderRadius: 1,
+              position: 'relative',
+              padding: 2,
+              backgroundColor: modoOscuro ? '#1e1e1e' : '#ffffff',
+            }}
+          >
+            <Bar data={datosGraficoBarras} options={opcionesGraficoBarras} />
           </Box>
         </Paper>
       )}
