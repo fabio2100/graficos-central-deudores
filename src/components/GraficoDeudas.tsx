@@ -601,7 +601,8 @@ const GraficoDeudas = () => {
               }}
             >
               <Box sx={{ 
-                width: 700, // Ancho dinámico basado en cantidad de períodos
+                width: '100%', // Tomar todo el ancho disponible
+                minWidth: 700, // Ancho mínimo de 700px
                 height: 600,
                 flexShrink: 0 // Evitar que se encoja
               }}>
