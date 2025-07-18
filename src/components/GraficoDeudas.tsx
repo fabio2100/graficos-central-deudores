@@ -13,6 +13,11 @@ import {
   InputAdornment,
   Chip,
   useTheme,
+  FormControl,
+  FormLabel,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -154,6 +159,7 @@ const GraficoDeudas = () => {
   const [cargando, setCargando] = useState<boolean>(false);
   const [datosConsulta, setDatosConsulta] = useState<ResultadoBCRA | null>(null);
   const [error, setError] = useState<string>('');
+  const [tipoGrafico, setTipoGrafico] = useState<'lineas' | 'barras'>('lineas');
 
   // Manejar cambio en el input con formateo automático
   const manejarCambioNumero = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -162,6 +168,11 @@ const GraficoDeudas = () => {
     
     // Limpiar error si existe
     if (error) setError('');
+  };
+
+  // Manejar cambio en el tipo de gráfico
+  const manejarCambioTipoGrafico = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setTipoGrafico(event.target.value as 'lineas' | 'barras');
   };
 
   // Función para buscar deudor en la API del BCRA
@@ -628,9 +639,9 @@ const GraficoDeudas = () => {
     },
   }), [modoOscuro]);
 
-  // Efecto para posicionar el scroll a la derecha cuando se cargan los datos
+  // Efecto para posicionar el scroll a la derecha cuando se cargan los datos o cambia el tipo de gráfico
   useEffect(() => {
-    if (datosConsulta && scrollContainerLineas.current) {
+    if (datosConsulta && tipoGrafico === 'lineas' && scrollContainerLineas.current) {
       // Posicionar scroll del gráfico de líneas a la derecha
       setTimeout(() => {
         if (scrollContainerLineas.current) {
@@ -638,10 +649,10 @@ const GraficoDeudas = () => {
         }
       }, 100);
     }
-  }, [datosConsulta]);
+  }, [datosConsulta, tipoGrafico]);
 
   useEffect(() => {
-    if (datosConsulta && scrollContainerBarras.current) {
+    if (datosConsulta && tipoGrafico === 'barras' && scrollContainerBarras.current) {
       // Posicionar scroll del gráfico de barras a la derecha
       setTimeout(() => {
         if (scrollContainerBarras.current) {
@@ -649,7 +660,7 @@ const GraficoDeudas = () => {
         }
       }, 100);
     }
-  }, [datosConsulta]);
+  }, [datosConsulta, tipoGrafico]);
 
   return (
     <Box sx={{ width: '100%' }}>
@@ -763,8 +774,36 @@ const GraficoDeudas = () => {
         </Box>
       )}
 
-      {/* Gráfico */}
-      {datosGrafico && (
+      {/* Selector de tipo de gráfico */}
+      {(datosGrafico || datosGraficoBarras) && (
+        <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
+          <FormControl component="fieldset">
+            <FormLabel component="legend" sx={{ mb: 2, fontWeight: 'bold', fontSize: '1.1rem' }}>
+              Tipo de gráfico
+            </FormLabel>
+            <RadioGroup
+              row
+              value={tipoGrafico}
+              onChange={manejarCambioTipoGrafico}
+              sx={{ gap: 3 }}
+            >
+              <FormControlLabel 
+                value="lineas" 
+                control={<Radio />} 
+                label="Líneas" 
+              />
+              <FormControlLabel 
+                value="barras" 
+                control={<Radio />} 
+                label="Barras" 
+              />
+            </RadioGroup>
+          </FormControl>
+        </Paper>
+      )}
+
+      {/* Gráfico de líneas */}
+      {datosGrafico && tipoGrafico === 'lineas' && (
         <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
           <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <TrendingUpIcon />
@@ -792,15 +831,6 @@ const GraficoDeudas = () => {
             • <strong>Leyenda interactiva</strong>: Haga clic en las etiquetas para mostrar/ocultar series específicas
           </Typography>
           
-          {/* Título del gráfico */}
-          <Typography variant="h6" sx={{ 
-            textAlign: 'center', 
-            mb: 2, 
-            fontWeight: 'bold', 
-            color: modoOscuro ? 'primary.light' : 'primary.main' 
-          }}>
-            Deudas por período y entidad (en miles)
-          </Typography>
           
           {/* Contenedor del gráfico */}
           <Box 
@@ -825,7 +855,7 @@ const GraficoDeudas = () => {
       )}
 
       {/* Gráfico de barras apiladas */}
-      {datosGraficoBarras && (
+      {datosGraficoBarras && tipoGrafico === 'barras' && (
         <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
           <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <TrendingUpIcon />
