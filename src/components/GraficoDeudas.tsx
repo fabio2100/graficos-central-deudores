@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import axios from 'axios';
 import {
   Box,
@@ -36,7 +36,6 @@ import {
 } from 'chart.js';
 import { Line, Bar } from 'react-chartjs-2';
 import type { ResultadoBCRA, Entidad, Periodo } from '../types';
-import { datosEjemplo } from '../utils/datosEjemplo';
 
 // Registrar los componentes necesarios de Chart.js
 ChartJS.register(
@@ -147,6 +146,10 @@ const GraficoDeudas = () => {
   const theme = useTheme();
   const modoOscuro = theme.palette.mode === 'dark';
   
+  // Referencias para los contenedores de scroll
+  const scrollContainerLineas = useRef<HTMLDivElement>(null);
+  const scrollContainerBarras = useRef<HTMLDivElement>(null);
+  
   const [numeroIdentificacion, setNumeroIdentificacion] = useState<string>('');
   const [cargando, setCargando] = useState<boolean>(false);
   const [datosConsulta, setDatosConsulta] = useState<ResultadoBCRA | null>(null);
@@ -165,6 +168,7 @@ const GraficoDeudas = () => {
   const buscarDeudor = async () => {
     if (!numeroIdentificacion.trim()) {
       setError('Por favor ingrese un número de identificación');
+      setDatosConsulta(null); // Limpiar datos anteriores
       return;
     }
 
@@ -172,12 +176,14 @@ const GraficoDeudas = () => {
     const numeroLimpio = numeroIdentificacion.replace(/\D/g, '');
     if (numeroLimpio.length !== 11) {
       setError('El número de CUIT/CUIL debe tener 11 dígitos');
+      setDatosConsulta(null); // Limpiar datos anteriores
       return;
     }
 
     // Validar dígito verificador
     if (!validarCuitCuil(numeroIdentificacion)) {
       setError('El número de CUIT/CUIL no es válido (dígito verificador incorrecto)');
+      setDatosConsulta(null); // Limpiar datos anteriores
       return;
     }
 
@@ -231,15 +237,10 @@ const GraficoDeudas = () => {
       }
       
       setError(mensajeError);
+      setDatosConsulta(null); // Limpiar datos anteriores cuando hay error de API
       
-      // En caso de error, mostrar datos de ejemplo para testing
-      if (import.meta.env.DEV) {
-        console.log('Usando datos de ejemplo en modo desarrollo');
-        setTimeout(() => {
-          setDatosConsulta(datosEjemplo.results);
-          setError('⚠️ Mostrando datos de ejemplo (API no disponible)');
-        }, 1000);
-      }
+      // Ya no mostrar datos de ejemplo en caso de error
+      // Los datos solo se mostrarán cuando la API responda correctamente
     } finally {
       setCargando(false);
     }
@@ -627,6 +628,29 @@ const GraficoDeudas = () => {
     },
   }), [modoOscuro]);
 
+  // Efecto para posicionar el scroll a la derecha cuando se cargan los datos
+  useEffect(() => {
+    if (datosConsulta && scrollContainerLineas.current) {
+      // Posicionar scroll del gráfico de líneas a la derecha
+      setTimeout(() => {
+        if (scrollContainerLineas.current) {
+          scrollContainerLineas.current.scrollLeft = scrollContainerLineas.current.scrollWidth;
+        }
+      }, 100);
+    }
+  }, [datosConsulta]);
+
+  useEffect(() => {
+    if (datosConsulta && scrollContainerBarras.current) {
+      // Posicionar scroll del gráfico de barras a la derecha
+      setTimeout(() => {
+        if (scrollContainerBarras.current) {
+          scrollContainerBarras.current.scrollLeft = scrollContainerBarras.current.scrollWidth;
+        }
+      }, 100);
+    }
+  }, [datosConsulta]);
+
   return (
     <Box sx={{ width: '100%' }}>
       {/* Sección de búsqueda */}
@@ -780,6 +804,7 @@ const GraficoDeudas = () => {
           
           {/* Contenedor del gráfico */}
           <Box 
+            ref={scrollContainerLineas}
             sx={{ 
               width: '100%',
               height: 600,
@@ -789,9 +814,12 @@ const GraficoDeudas = () => {
               position: 'relative',
               padding: 2,
               backgroundColor: modoOscuro ? '#1e1e1e' : '#ffffff',
+              overflowX: 'auto', // Permitir scroll horizontal si es necesario
             }}
           >
-            <Line data={datosGrafico} options={opcionesGrafico} />
+            <Box sx={{ minWidth: 600, height: '100%' }}>
+              <Line data={datosGrafico} options={opcionesGrafico} />
+            </Box>
           </Box>
         </Paper>
       )}
@@ -823,6 +851,7 @@ const GraficoDeudas = () => {
           
           {/* Contenedor del gráfico de barras */}
           <Box 
+            ref={scrollContainerBarras}
             sx={{ 
               width: '100%',
               height: 400,
@@ -832,9 +861,12 @@ const GraficoDeudas = () => {
               position: 'relative',
               padding: 2,
               backgroundColor: modoOscuro ? '#1e1e1e' : '#ffffff',
+              overflowX: 'auto', // Permitir scroll horizontal si es necesario
             }}
           >
-            <Bar data={datosGraficoBarras} options={opcionesGraficoBarras} />
+            <Box sx={{ minWidth: 600, height: '100%' }}>
+              <Bar data={datosGraficoBarras} options={opcionesGraficoBarras} />
+            </Box>
           </Box>
         </Paper>
       )}
