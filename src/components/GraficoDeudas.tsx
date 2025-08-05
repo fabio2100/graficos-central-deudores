@@ -18,6 +18,9 @@ import {
   RadioGroup,
   FormControlLabel,
   Radio,
+  Select,
+  MenuItem,
+  InputLabel,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -160,6 +163,7 @@ const GraficoDeudas = () => {
   const [datosConsulta, setDatosConsulta] = useState<ResultadoBCRA | null>(null);
   const [error, setError] = useState<string>('');
   const [tipoGrafico, setTipoGrafico] = useState<'lineas' | 'barras'>('lineas');
+  const [periodoSeleccionado, setPeriodoSeleccionado] = useState<string>('');
 
   // Manejar cambio en el input con formateo automático
   const manejarCambioNumero = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -173,6 +177,11 @@ const GraficoDeudas = () => {
   // Manejar cambio en el tipo de gráfico
   const manejarCambioTipoGrafico = (event: React.ChangeEvent<HTMLInputElement>) => {
     setTipoGrafico(event.target.value as 'lineas' | 'barras');
+  };
+
+  // Manejar cambio de período seleccionado
+  const manejarCambioPeriodo = (event: any) => {
+    setPeriodoSeleccionado(event.target.value);
   };
 
   // Función para buscar deudor en la API del BCRA
@@ -904,28 +913,56 @@ const GraficoDeudas = () => {
       {/* Detalle por entidades */}
       {datosConsulta && (
         <Paper elevation={3} sx={{ p: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            Situación Actual por Entidades
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+            <Typography variant="h6" sx={{ flex: 1 }}>
+              Situación por Entidades
+            </Typography>
+            <FormControl sx={{ minWidth: 200 }}>
+              <InputLabel id="periodo-select-label">Período</InputLabel>
+              <Select
+                labelId="periodo-select-label"
+                id="periodo-select"
+                value={periodoSeleccionado || datosConsulta.periodos
+                  .sort((a, b) => parseInt(b.periodo) - parseInt(a.periodo))[0].periodo}
+                onChange={manejarCambioPeriodo}
+                label="Período"
+              >
+                {datosConsulta.periodos
+                  .sort((a, b) => parseInt(b.periodo) - parseInt(a.periodo))
+                  .map((periodo) => {
+                    const año = periodo.periodo.substring(0, 4);
+                    const mes = periodo.periodo.substring(4, 6);
+                    return (
+                      <MenuItem key={periodo.periodo} value={periodo.periodo}>
+                        {`${mes}/${año}`}
+                      </MenuItem>
+                    );
+                  })}
+              </Select>
+            </FormControl>
+          </Box>
           
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Se muestra únicamente el último período con las entidades que tienen situación distinta de 0 (con deuda).
+            Mostrando entidades con situación distinta de 0 (con deuda) para el período seleccionado.
           </Typography>
           
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
             {(() => {
-              // Obtener el último período (más reciente)
-              const ultimoPeriodo = datosConsulta.periodos
-                .sort((a, b) => parseInt(b.periodo) - parseInt(a.periodo))[0];
+              // Obtener el período seleccionado o el último si no hay selección
+              const periodoActual = datosConsulta.periodos
+                .find(p => p.periodo === (periodoSeleccionado || datosConsulta.periodos
+                  .sort((a, b) => parseInt(b.periodo) - parseInt(a.periodo))[0].periodo));
 
-              if (!ultimoPeriodo) return null;
+              if (!periodoActual) return null;
 
               // Filtrar entidades con situación !== 0
-              const entidadesConDeuda = ultimoPeriodo.entidades
+              const entidadesConDeuda = periodoActual.entidades
                 .filter((entidad: Entidad) => entidad.situacion !== 0)
                 .sort((a, b) => b.monto - a.monto); // Ordenar por monto descendente
 
               if (entidadesConDeuda.length === 0) {
+                const año = periodoActual.periodo.substring(0, 4);
+                const mes = periodoActual.periodo.substring(4, 6);
                 return (
                   <Box sx={{ width: '100%', textAlign: 'center', py: 4 }}>
                     <CheckCircleIcon sx={{ fontSize: 60, color: 'success.main', mb: 2 }} />
@@ -933,60 +970,81 @@ const GraficoDeudas = () => {
                       Sin deudas registradas
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      En el último período no se registran deudas pendientes
+                      No se registran deudas pendientes en el período {mes}/{año}
                     </Typography>
                   </Box>
                 );
               }
 
-              const año = ultimoPeriodo.periodo.substring(0, 4);
-              const mes = ultimoPeriodo.periodo.substring(4, 6);
+              const año = periodoActual.periodo.substring(0, 4);
+              const mes = periodoActual.periodo.substring(4, 6);
               const periodoFormateado = `${mes}/${año}`;
 
-              return entidadesConDeuda.map((entidad: Entidad, index) => (
-                <Box key={index} sx={{ flex: '0 1 300px', minWidth: 300 }}>
-                  <Card variant="outlined" sx={{ height: '100%' }}>
-                    <CardContent>
-                      <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
-                        {entidad.entidad}
-                      </Typography>
-                      
-                      <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 'bold' }}>
-                        Período: {periodoFormateado}
-                      </Typography>
-                      
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                        <Typography variant="h5" color="primary">
-                          ${entidad.monto.toLocaleString('es-AR')}.000
-                        </Typography>
-                        <Chip
-                          icon={obtenerIconoSituacion(entidad.situacion)}
-                          label={`Situación ${entidad.situacion}`}
-                          size="medium"
-                          sx={{
-                            backgroundColor: obtenerColorSituacion(entidad.situacion),
-                            color: 'white',
-                            fontWeight: 'bold',
-                          }}
-                        />
-                      </Box>
-                      
-                      <Typography variant="body1" color="text.secondary" gutterBottom sx={{ fontWeight: 'medium' }}>
-                        {obtenerTextoSituacion(entidad.situacion)}
-                      </Typography>
-                      
-                      <Box sx={{ display: 'flex', gap: 1, mt: 2, flexWrap: 'wrap' }}>
-                        {entidad.enRevision && (
-                          <Chip label="En Revisión" size="small" variant="outlined" color="warning" />
-                        )}
-                        {entidad.procesoJud && (
-                          <Chip label="Proceso Judicial" size="small" variant="outlined" color="error" />
-                        )}
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Box>
-              ));
+              // Calcular el total de deudas para el período actual
+              const totalDeudasPeriodo = entidadesConDeuda.reduce((sum, entidad) => sum + entidad.monto, 0);
+
+              return (
+                <>
+                  <Box sx={{ width: '100%', mb: 3 }}>
+                    <Card sx={{ backgroundColor: theme.palette.background.default }}>
+                      <CardContent>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Typography variant="h6">
+                            Total de Deudas - {periodoFormateado}
+                          </Typography>
+                          <Typography variant="h4" color="primary">
+                            ${totalDeudasPeriodo.toLocaleString('es-AR')}.000
+                          </Typography>
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  </Box>
+                  {entidadesConDeuda.map((entidad: Entidad) => (
+                    <Box key={`${periodoActual.periodo}-${entidad.entidad}`} sx={{ flex: '0 1 300px', minWidth: 300 }}>
+                      <Card variant="outlined" sx={{ height: '100%' }}>
+                        <CardContent>
+                          <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
+                            {entidad.entidad}
+                          </Typography>
+                          
+                          <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 'bold' }}>
+                            Período: {periodoFormateado}
+                          </Typography>
+                          
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                            <Typography variant="h5" color="primary">
+                              ${entidad.monto.toLocaleString('es-AR')}.000
+                            </Typography>
+                            <Chip
+                              icon={obtenerIconoSituacion(entidad.situacion)}
+                              label={`Situación ${entidad.situacion}`}
+                              size="medium"
+                              sx={{
+                                backgroundColor: obtenerColorSituacion(entidad.situacion),
+                                color: 'white',
+                                fontWeight: 'bold',
+                              }}
+                            />
+                          </Box>
+                          
+                          <Typography variant="body1" color="text.secondary" gutterBottom sx={{ fontWeight: 'medium' }}>
+                            {obtenerTextoSituacion(entidad.situacion)}
+                          </Typography>
+                          
+                          <Box sx={{ display: 'flex', gap: 1, mt: 2, flexWrap: 'wrap' }}>
+                            {entidad.enRevision && (
+                              <Chip label="En Revisión" size="small" variant="outlined" color="warning" />
+                            )}
+                            {entidad.procesoJud && (
+                              <Chip label="Proceso Judicial" size="small" variant="outlined" color="error" />
+                            )}
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    </Box>
+                  ))}
+                </>
+              );
             })()}
           </Box>
         </Paper>
