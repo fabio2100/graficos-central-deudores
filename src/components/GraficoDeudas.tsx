@@ -220,7 +220,6 @@ const GraficoDeudas = () => {
         timeout: 30000, // 30 segundos de timeout
         headers: {
           'Accept': 'application/json',
-          'User-Agent': 'Central-Deudores-App/1.0'
         }
       });
 
