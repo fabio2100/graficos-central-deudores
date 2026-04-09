@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import axios from 'axios';
+
 import {
   Box,
   Paper,
@@ -211,21 +211,43 @@ const GraficoDeudas = () => {
     setError('');
     
     try {
-      // URL correcta de la API del BCRA para Central de Deudores (Deudas Históricas)
-      const url = `https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/${numeroLimpio}`;
+      // URL a través del proxy local de Vite para evitar bloqueos CORS
+      const url = `/api/bcra/centraldedeudores/v1.0/Deudas/Historicas/${numeroLimpio}`;
       
       console.log('Consultando API del BCRA:', url);
       
-      const response = await axios.get(url, {
-        timeout: 30000, // 30 segundos de timeout
-        headers: {
-          'Accept': 'application/json',
-        }
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-      if (response.data && response.data.results) {
-        setDatosConsulta(response.data.results);
-        console.log('Datos recibidos:', response.data.results);
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          signal: controller.signal,
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      if (response.status === 404) {
+        throw Object.assign(new Error('NOT_FOUND'), { status: 404 });
+      } else if (response.status === 400) {
+        throw Object.assign(new Error('BAD_REQUEST'), { status: 400 });
+      } else if (response.status === 429) {
+        throw Object.assign(new Error('TOO_MANY_REQUESTS'), { status: 429 });
+      } else if (response.status >= 500) {
+        throw Object.assign(new Error('SERVER_ERROR'), { status: response.status });
+      } else if (!response.ok) {
+        throw Object.assign(new Error('HTTP_ERROR'), { status: response.status });
+      }
+
+      const data = await response.json();
+
+      if (data && data.results) {
+        setDatosConsulta(data.results);
+        console.log('Datos recibidos:', data.results);
       } else {
         throw new Error('Formato de respuesta inesperado');
       }
@@ -235,19 +257,20 @@ const GraficoDeudas = () => {
       
       let mensajeError = 'Error al consultar la información. ';
       
-      if (axios.isAxiosError(error)) {
-        if (error.response?.status === 404) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        mensajeError += 'La consulta tardó demasiado tiempo. Intente nuevamente.';
+      } else if (error instanceof TypeError) {
+        mensajeError += 'No hay conexión a internet o el servicio no está disponible.';
+      } else if (error instanceof Error) {
+        const status = (error as Error & { status?: number }).status;
+        if (status === 404) {
           mensajeError += 'No se encontraron datos para este número de identificación.';
-        } else if (error.response?.status === 400) {
+        } else if (status === 400) {
           mensajeError += 'El número de identificación no es válido.';
-        } else if (error.response?.status === 429) {
+        } else if (status === 429) {
           mensajeError += 'Demasiadas consultas. Intente nuevamente en unos minutos.';
-        } else if (error.response?.status && error.response.status >= 500) {
+        } else if (status && status >= 500) {
           mensajeError += 'El servicio no está disponible temporalmente.';
-        } else if (error.code === 'ECONNABORTED') {
-          mensajeError += 'La consulta tardó demasiado tiempo. Intente nuevamente.';
-        } else if (error.code === 'ERR_NETWORK') {
-          mensajeError += 'No hay conexión a internet o el servicio no está disponible.';
         } else {
           mensajeError += 'Intente nuevamente más tarde.';
         }
