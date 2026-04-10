@@ -212,7 +212,7 @@ const GraficoDeudas = () => {
     
     try {
       // URL a través del proxy local de Vite para evitar bloqueos CORS
-      const url = `/api/bcra/centraldedeudores/v1.0/Deudas/Historicas/${numeroLimpio}`;
+      const url = `https://api.bcra.gob.ar/centraldedeudores/v1.0/Deudas/Historicas/${numeroLimpio}`;
       
       console.log('Consultando API del BCRA:', url);
       
